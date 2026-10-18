@@ -5,254 +5,385 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#EEF1F4">
-<title>Patrimoine – Phase 0</title>
+<title>Patrimoine</title>
 <style>
 :root{
   --bg:#EEF1F4; --surface:#FFFFFF; --ink:#14202B; --muted:#5E6B78; --line:#D9DFE5;
   --accent:#1D4ED8; --up:#13795B; --down:#B42318;
-  box-sizing:border-box;
+  box-sizing:border-box; color-scheme:light;
   padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
-  color-scheme:light;
 }
 @media (prefers-color-scheme:dark){
   :root{--bg:#10171E; --surface:#18222C; --ink:#E7EDF2; --muted:#93A1AE; --line:#2A3743;
         --accent:#7CA2FF; --up:#4CC9A0; --down:#FF8A7A; color-scheme:dark}
 }
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);
-  font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   font-variant-numeric:tabular-nums;-webkit-text-size-adjust:100%}
-main{max-width:640px;margin:0 auto;padding:20px 16px 48px}
+main{max-width:640px;margin:0 auto;padding:16px 16px 28px}
 h1{font-size:15px;font-weight:600;color:var(--muted);margin:0 0 6px}
+h2{font-size:15px;font-weight:600;margin:24px 0 8px}
 .total{font-size:40px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
-.sub{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:6px;font-size:15px}
-.fresh{margin-top:10px;font-size:13px;color:var(--muted)}
-.fresh.err{color:var(--down)}
+.sub{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px;font-size:15px}
+.note{font-size:13px;color:var(--muted);margin-top:8px}
+.note.err{color:var(--down)}
 .up{color:var(--up)} .down{color:var(--down)}
-section{margin-top:24px}
-h2{font-size:15px;font-weight:600;margin:0 0 8px}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:14px}
-.row{display:flex;justify-content:space-between;gap:12px;padding:12px 14px;border-top:1px solid var(--line)}
-.row:first-child{border-top:0}
-.row .l{min-width:0}
-.row .n{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.row .m{font-size:13px;color:var(--muted)}
-.row .r{text-align:right;flex:none}
-.row button.x{background:none;border:0;color:var(--muted);font-size:13px;padding:4px 0 0;cursor:pointer}
-.empty{padding:16px 14px;color:var(--muted);font-size:15px}
-input{width:100%;font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);
-  border-radius:12px;padding:12px 14px}
-input:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.res{width:100%;text-align:left;font:inherit;color:inherit;background:none;border:0;cursor:pointer}
-.form{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px;border-top:1px solid var(--line)}
-.form .full{grid-column:1/-1}
-label{font-size:13px;color:var(--muted);display:block;margin-bottom:4px}
-.btn{font:inherit;font-weight:600;border:0;border-radius:12px;padding:12px 14px;cursor:pointer;
-  background:var(--accent);color:#fff}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.list>*+*{border-top:1px solid var(--line)}
+.row{display:flex;justify-content:space-between;gap:12px;align-items:center;width:100%;padding:12px 14px;border:0;background:none;
+  text-align:left;font:inherit;color:inherit}
+button.row{cursor:pointer}
+.row .l{min-width:0;flex:1}
+.row .n,.n{font-weight:600}
+.row .l .n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.m{font-size:13px;color:var(--muted)}
+.r{text-align:right;flex:none}
+.bar{height:6px;border-radius:3px;background:var(--line);margin-top:8px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent)}
+.empty{padding:14px;color:var(--muted);font-size:15px}
+.badge{font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:2px 8px;flex:none}
+input,select{width:100%;font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+select{flex:1}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px}
+.full{grid-column:1/-1}
+label{display:block;font-size:13px;color:var(--muted);margin-bottom:4px}
+.btn{font:inherit;font-weight:600;border:0;border-radius:12px;padding:12px 14px;cursor:pointer;background:var(--accent);color:#fff}
 .btn.alt{background:transparent;color:var(--muted);border:1px solid var(--line)}
-@media (prefers-color-scheme:dark){.btn{color:#0B1220}}
+@media (prefers-color-scheme:dark){.btn{color:#0B1220}.btn.alt{color:var(--muted)}}
+.btns{display:flex;flex-wrap:wrap;gap:10px}
+.link{background:none;border:0;color:var(--accent);font:inherit;padding:6px 0;cursor:pointer}
+.link.del{color:var(--down)}
 details{margin-top:24px;font-size:14px;color:var(--muted)}
 summary{cursor:pointer}
 details input{margin:10px 0}
+nav{position:sticky;bottom:0;display:flex;background:var(--surface);border-top:1px solid var(--line)}
+nav button{flex:1;font:inherit;font-size:12px;padding:12px 2px;background:none;border:0;color:var(--muted)}
+nav button[aria-current]{color:var(--accent);font-weight:600}
+nav button:disabled{opacity:.45}
 </style>
 </head>
 <body>
-<main>
-  <h1>Patrimoine côté bourse</h1>
-  <div class="total" id="total">–</div>
-  <div class="sub" id="sub"></div>
-  <div class="fresh" id="fresh"></div>
-
-  <section>
-    <h2>Ajouter une ligne</h2>
-    <div class="card">
-      <div style="padding:10px">
-        <input id="q" type="search" placeholder="Nom, symbole ou ISIN (ex. LVMH, VWCE, bitcoin)" autocomplete="off" autocapitalize="off" enterkeyhint="search">
-      </div>
-      <div id="results"></div>
-    </div>
-  </section>
-
-  <section>
-    <h2>Mes lignes</h2>
-    <div class="card" id="list"></div>
-  </section>
-
-  <details id="cfg">
-    <summary>Relais de cours</summary>
-    <input id="url" type="url" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="off">
-    <button class="btn" id="saveUrl">Enregistrer l’adresse</button>
-  </details>
-</main>
+<main id="app"></main>
+<nav id="nav"></nav>
 
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
-const store = {
+const h = (t, a, ...c) => {
+  const e = document.createElement(t);
+  for(const k in a || {}){
+    const v = a[k];
+    if(k === 'class') e.className = v;
+    else if(k.startsWith('on')) e[k] = v;
+    else if(v != null && v !== false) e.setAttribute(k, v === true ? '' : v);
+  }
+  c.flat().forEach(x => x != null && e.append(x.nodeType ? x : document.createTextNode(x)));
+  return e;
+};
+const ls = {
   get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
 };
-let pos = store.get('pf0.pos', []);
-let url = store.get('pf0.url', '');
-let quotes = {}, fx = { EUR: 1 }, stamp = null, failed = false;
 
-const eur = new Intl.NumberFormat('fr-FR', { style:'currency', currency:'EUR' });
-const pct = new Intl.NumberFormat('fr-FR', { style:'percent', minimumFractionDigits:2, maximumFractionDigits:2, signDisplay:'exceptZero' });
-const num = new Intl.NumberFormat('fr-FR', { maximumFractionDigits:6 });
-const money = (v, c) => { try{ return new Intl.NumberFormat('fr-FR', { style:'currency', currency:c, maximumFractionDigits:4 }).format(v); }catch(e){ return num.format(v) + ' ' + c; } };
-const hm = t => new Date(t).toLocaleString('fr-FR', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+/* ---------- Modèle : enveloppes → lignes ---------- */
+const TYPES = {
+  pea:{n:'PEA', c:'Bourse', m:1}, cto:{n:'CTO', c:'Bourse', m:1}, crypto:{n:'Cryptos', c:'Crypto', m:1},
+  es:{n:'Épargne salariale', c:'Épargne'}, av:{n:'Assurance vie', c:'Épargne'},
+  la:{n:'Livret A', c:'Épargne', nc:1}, lj:{n:'Livret jeune', c:'Épargne', nc:1},
+  cf:{n:'Immobilier crowdfunding', c:'Immobilier'}, im:{n:'Immobilier', c:'Immobilier'},
+  au:{n:'Autres actifs (montres, voiture, or…)', c:'Autres'}
+};
+const CLASSES = ['Bourse', 'Crypto', 'Épargne', 'Immobilier', 'Autres'];
+/* ligne cotée : {id,m:1,sym,name,qty,cost,divs[]}  ·  ligne manuelle : {id,name,val,cst,divs[]} */
+let S = ls.get('pf.v1', null) || { envs:[], done:false, step:null, url: ls.get('pf0.url', '') };
+let M = ls.get('pf.q', { q:{}, fx:{ EUR:1 }, t:null });
+let failed = false, yes = false;
+const save = () => ls.set('pf.v1', S);
+const uid = () => Math.random().toString(36).slice(2, 9);
 
-function el(tag, cls, text){
-  const e = document.createElement(tag);
-  if(cls) e.className = cls;
-  if(text != null) e.textContent = text;
-  return e;
+const E0 = new Intl.NumberFormat('fr-FR', { style:'currency', currency:'EUR', maximumFractionDigits:0 });
+const E2 = new Intl.NumberFormat('fr-FR', { style:'currency', currency:'EUR' });
+const P = new Intl.NumberFormat('fr-FR', { style:'percent', minimumFractionDigits:1, maximumFractionDigits:1, signDisplay:'exceptZero' });
+const PP = new Intl.NumberFormat('fr-FR', { style:'percent', minimumFractionDigits:1, maximumFractionDigits:1 });
+const P0 = new Intl.NumberFormat('fr-FR', { style:'percent', maximumFractionDigits:0 });
+const N = new Intl.NumberFormat('fr-FR', { maximumFractionDigits:6 });
+const sg = v => (v >= 0 ? '+' : '') + E0.format(v);
+const cls = v => v >= 0 ? 'up' : 'down';
+const money = (v, c) => { try{ return new Intl.NumberFormat('fr-FR', { style:'currency', currency:c, maximumFractionDigits:4 }).format(v); }catch(e){ return N.format(v) + ' ' + c; } };
+
+/* ---------- Calculs ---------- */
+function val(l){
+  if(!l.m) return { v:l.val || 0, c:l.cst || 0, d:0 };
+  const q = M.q[l.sym];
+  if(!q || q.error || q.price == null) return null;
+  const r = q.currency === 'EUR' ? 1 : M.fx[q.currency];
+  if(!r) return null;
+  return { v:q.price * l.qty * r, c:l.cost * l.qty * r, d:(q.price - q.prev) * l.qty * r };
 }
+const divs = l => (l.divs || []).reduce((a, d) => a + d.amt, 0);
+function agg(lines){
+  const o = { v:0, c:0, d:0, dv:0, miss:0 };
+  lines.forEach(l => { const x = val(l); if(x){ o.v += x.v; o.c += x.c; o.d += x.d; } else o.miss++; o.dv += divs(l); });
+  return o;
+}
+const allLines = () => S.envs.flatMap(e => e.lines);
+const classEnvs = c => S.envs.filter(e => TYPES[e.type].c === c);
 
-/* ---------- Relais ---------- */
-async function api(params){
-  const r = await fetch(url + '?' + new URLSearchParams(params));
+/* ---------- Cours (relais Apps Script) ---------- */
+async function api(p){
+  const r = await fetch(S.url + '?' + new URLSearchParams(p));
   if(!r.ok) throw new Error('HTTP ' + r.status);
   const j = await r.json();
   if(j.error) throw new Error(j.error);
   return j;
 }
-const norm = q => q.currency === 'GBp'
-  ? { ...q, price:q.price/100, prev:q.prev/100, currency:'GBP' } : q;
-
+const norm = q => q.currency === 'GBp' ? { ...q, price:q.price / 100, prev:q.prev / 100, currency:'GBP' } : q;
 async function refresh(){
+  const syms = [...new Set(allLines().filter(l => l.m).map(l => l.sym))];
+  if(!S.url || !syms.length) return;
   failed = false;
-  if(!url || !pos.length){ render(); return; }
-  $('#fresh').textContent = 'Actualisation…';
   try{
-    const a = await api({ symbols: pos.map(p => p.symbol).join(',') });
-    quotes = {};
-    for(const [s, q] of Object.entries(a.quotes)) quotes[s] = q.error ? q : norm(q);
-    const cur = [...new Set(Object.values(quotes).map(q => q.currency).filter(c => c && c !== 'EUR'))];
+    const a = await api({ symbols:syms.join(',') });
+    const q = {};
+    for(const s in a.quotes) q[s] = a.quotes[s].error ? a.quotes[s] : norm(a.quotes[s]);
+    const cur = [...new Set(Object.values(q).map(x => x.currency).filter(c => c && c !== 'EUR'))];
+    const fx = { EUR:1 };
     if(cur.length){
-      const b = await api({ symbols: cur.map(c => c + 'EUR=X').join(',') });
-      for(const c of cur){ const q = b.quotes[c + 'EUR=X']; fx[c] = q && q.price ? q.price : null; }
+      const b = await api({ symbols:cur.map(c => c + 'EUR=X').join(',') });
+      cur.forEach(c => { const x = b.quotes[c + 'EUR=X']; fx[c] = x && x.price ? x.price : null; });
     }
-    stamp = Date.now();
+    M = { q, fx, t:Date.now() }; ls.set('pf.q', M);
   }catch(e){ failed = true; }
-  render();
+  const t = document.activeElement && document.activeElement.tagName;
+  if(t !== 'INPUT' && t !== 'SELECT') render();
 }
 
-/* ---------- Affichage ---------- */
-function render(){
-  const list = $('#list'); list.replaceChildren();
-  let total = 0, cost = 0, day = 0, missing = 0;
+/* ---------- Composants ---------- */
+const go = x => { location.hash = x; };
+const back = (href, t) => h('button', { class:'link', onclick:() => go(href) }, '‹ ' + t);
+const numIn = () => h('input', { type:'number', inputmode:'decimal', step:'any', min:'0' });
+const fld = (lab, i, full) => h('div', { class:full ? 'full' : null }, h('label', null, lab), i);
+function head(title, a){
+  const pv = a.v - a.c;
+  return h('div', null, h('h1', null, title), h('div', { class:'total' }, E0.format(a.v)),
+    h('div', { class:'sub' },
+      a.c && Math.abs(pv) >= 0.5 ? h('span', { class:cls(pv) }, sg(pv) + ' de plus-value (' + P.format(pv / a.c) + ')') : null,
+      a.dv ? h('span', null, E0.format(a.dv) + ' de dividendes') : null));
+}
+function note(a, lines){
+  const hasM = (lines || allLines()).some(l => l.m);
+  let t = '', err = false;
+  if(hasM && !S.url){ t = 'Renseigne l’adresse du relais dans les réglages pour actualiser les cours.'; err = true; }
+  else if(failed){ t = 'Actualisation impossible, derniers cours connus affichés.'; err = true; }
+  else if(hasM && M.t) t = 'Cours actualisés le ' + new Date(M.t).toLocaleString('fr-FR', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) + ' · décalage possible jusqu’à 20 min';
+  if(a.miss) t += (t ? ' · ' : '') + a.miss + ' ligne(s) sans cours';
+  return h('div', { class:'note' + (err ? ' err' : '') }, t);
+}
+function row(n, m, x, href){
+  const pv = x.v - x.c;
+  return h('button', { class:'row', onclick:() => go(href) },
+    h('div', { class:'l' }, h('div', { class:'n' }, n), h('div', { class:'m' }, m)),
+    h('div', { class:'r' }, h('div', { class:'n' }, E0.format(x.v)),
+      x.c && Math.abs(pv) >= 0.5 ? h('div', { class:'m ' + cls(pv) }, sg(pv) + ' (' + P.format(pv / x.c) + ')') : null));
+}
 
-  if(!pos.length){
-    list.append(el('div', 'empty', 'Aucune ligne pour l’instant. Cherche un titre ci-dessus pour commencer.'));
-  }
-  pos.forEach((p, i) => {
-    const q = quotes[p.symbol];
-    const ok = q && !q.error && q.price != null;
-    const rate = ok ? fx[q.currency] : null;
-    const row = el('div', 'row');
-    const l = el('div', 'l');
-    l.append(el('div', 'n', p.name), el('div', 'm', p.symbol + ' · ' + num.format(p.qty) + ' parts'));
-    const r = el('div', 'r');
-    if(ok && rate){
-      const v = q.price * p.qty * rate, c = p.cost * p.qty * rate;
-      const d = (q.price - q.prev) * p.qty * rate;
-      total += v; cost += c; day += d;
-      const pl = v - c;
-      r.append(el('div', 'n', eur.format(v)));
-      const m = el('div', 'm ' + (pl >= 0 ? 'up' : 'down'),
-        (pl >= 0 ? '+' : '') + eur.format(pl) + (c ? ' (' + pct.format(pl / c) + ')' : ''));
-      r.append(m);
-      r.append(el('div', 'm', money(q.price, q.currency) + ' · ' + pct.format((q.price - q.prev) / q.prev) +
-        ' · ' + new Date(q.time * 1000).toLocaleString('fr-FR', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })));
-    }else{
-      missing++;
-      r.append(el('div', 'm', url ? 'Cours indisponible' : 'En attente du relais'));
-    }
-    const x = el('button', 'x', 'Retirer'); x.type = 'button';
-    x.onclick = () => { if(confirm('Retirer « ' + p.name + ' » ?')){ pos.splice(i, 1); store.set('pf0.pos', pos); render(); refresh(); } };
-    r.append(x);
-    row.append(l, r); list.append(row);
+/* ---------- Écrans ---------- */
+function vHome(){
+  const a = agg(allLines());
+  const d = h('div', null, head('Patrimoine brut', a), note(a), h('h2', null, 'Répartition'));
+  const card = h('div', { class:'card list' });
+  CLASSES.forEach((c, i) => {
+    const es = classEnvs(c); if(!es.length) return;
+    const x = agg(es.flatMap(e => e.lines)), part = a.v ? x.v / a.v : 0, pv = x.v - x.c;
+    card.append(h('button', { class:'row', onclick:() => go('#/c/' + i) },
+      h('div', { class:'l' }, h('div', { class:'n' }, c), h('div', { class:'m' }, P0.format(part) + ' du total'),
+        h('div', { class:'bar' }, h('i', { style:'width:' + part * 100 + '%' }))),
+      h('div', { class:'r' }, h('div', { class:'n' }, E0.format(x.v)), x.c && Math.abs(pv) >= 0.5 ? h('div', { class:'m ' + cls(pv) }, sg(pv)) : null)));
   });
-
-  $('#total').textContent = stamp ? eur.format(total) : '–';
-  const sub = $('#sub'); sub.replaceChildren();
-  if(stamp && cost){
-    const pl = total - cost;
-    sub.append(el('span', pl >= 0 ? 'up' : 'down', (pl >= 0 ? '+' : '') + eur.format(pl) + ' de plus-value (' + pct.format(pl / cost) + ')'));
-    sub.append(el('span', day >= 0 ? 'up' : 'down', (day >= 0 ? '+' : '') + eur.format(day) + ' sur la séance'));
+  if(!card.children.length) card.append(h('div', { class:'empty' }, 'Ajoute une enveloppe pour voir ton patrimoine.'));
+  d.append(card, addEnv(), settings());
+  return d;
+}
+function vClass(i){
+  const c = CLASSES[i]; if(!c) return vHome();
+  const es = classEnvs(c), a = agg(es.flatMap(e => e.lines));
+  const card = h('div', { class:'card list' });
+  es.forEach(e => { const x = agg(e.lines); card.append(row(e.name, TYPES[e.type].n + ' · ' + P0.format(a.v ? x.v / a.v : 0) + ' de la classe', x, '#/e/' + e.id)); });
+  return h('div', null, back('#/', 'Patrimoine'), head(c, a), h('h2', null, 'Enveloppes'), card);
+}
+function vEnv(id){
+  const e = S.envs.find(x => x.id === id); if(!e) return vHome();
+  const t = TYPES[e.type], a = agg(e.lines);
+  const d = h('div', null, back('#/c/' + CLASSES.indexOf(t.c), t.c), head(e.name, a), note(a, e.lines));
+  if(S.step != null) d.append(h('button', { class:'btn', style:'margin-top:14px', onclick:() => { S.step++; save(); go('#/o'); } }, 'Étape suivante du questionnaire'));
+  d.append(h('h2', null, 'Lignes'));
+  const card = h('div', { class:'card list' });
+  e.lines.forEach(l => {
+    const x = val(l);
+    card.append(row(l.name, (l.m ? l.sym + ' · ' + N.format(l.qty) + ' parts' : '') + (x ? '' : ' · cours indisponible'), x || { v:0, c:0 }, '#/l/' + e.id + '/' + l.id));
+  });
+  if(!e.lines.length) card.append(h('div', { class:'empty' }, 'Aucune ligne pour l’instant.'));
+  d.append(card, h('h2', null, t.m ? 'Ajouter un titre' : 'Ajouter un actif'));
+  d.append(t.m ? searchBox(e) : h('div', { class:'card' }, manualForm(e.type, l => { e.lines.push(l); save(); render(); }, '')));
+  d.append(h('button', { class:'link del', style:'margin-top:20px', onclick:() => {
+    if(confirm('Supprimer « ' + e.name + ' » et toutes ses lignes ?')){ S.envs = S.envs.filter(x => x !== e); save(); go('#/'); }
+  } }, 'Supprimer cette enveloppe'));
+  return d;
+}
+function vLine(eid, lid){
+  const e = S.envs.find(x => x.id === eid), l = e && e.lines.find(x => x.id === lid); if(!l) return vHome();
+  const x = val(l) || { v:0, c:0, d:0 }, dv = divs(l), t = TYPES[e.type];
+  const d = h('div', null, back('#/e/' + eid, e.name), head(l.name, { v:x.v, c:x.c, dv }));
+  if(l.m){
+    const q = M.q[l.sym];
+    if(q && q.price != null) d.append(h('div', { class:'note' }, 'Dernier cours : ' + money(q.price, q.currency) + ' · ' + P.format((q.price - q.prev) / q.prev) + ' sur la séance'));
   }
-  const f = $('#fresh');
-  f.className = 'fresh' + (failed ? ' err' : '');
-  if(failed) f.textContent = 'Actualisation impossible. Vérifie l’adresse du relais ci-dessous.';
-  else if(!url) f.textContent = 'Renseigne l’adresse du relais de cours pour afficher les valeurs.';
-  else if(stamp) f.textContent = 'Actualisé le ' + hm(stamp) + (missing ? ' · ' + missing + ' ligne(s) sans cours' : '') + ' · les cours peuvent avoir jusqu’à 20 min de décalage';
-  else f.textContent = '';
-  if(!url) $('#cfg').open = true;
+  const ed = l.m ? [['Nombre de parts', 'qty'], ['Prix d’achat moyen', 'cost']] : [['Valeur actuelle (€)', 'val']].concat(t.nc ? [] : [['Prix d’achat (€)', 'cst']]);
+  const ins = ed.map(([lab, k]) => { const i = numIn(); i.value = l[k]; return [lab, k, i]; });
+  d.append(h('h2', null, 'Position'), h('div', { class:'card form' }, ...ins.map(([lab, , i]) => fld(lab, i)),
+    h('button', { class:'btn full', onclick:() => {
+      ins.forEach(([, k, i]) => { const n = parseFloat(i.value); if(n >= 0) l[k] = n; });
+      if(t.nc && !l.m) l.cst = l.val;
+      save(); render(); refresh();
+    } }, 'Enregistrer')));
+  d.append(h('h2', null, 'Dividendes perçus'));
+  const dc = h('div', { class:'card list' });
+  (l.divs || []).slice().sort((a, b) => b.d.localeCompare(a.d)).forEach(dd => dc.append(h('div', { class:'row' },
+    h('div', { class:'l' }, h('div', { class:'n' }, E2.format(dd.amt)), h('div', { class:'m' }, new Date(dd.d).toLocaleDateString('fr-FR'))),
+    h('button', { class:'link', onclick:() => { l.divs = l.divs.filter(z => z !== dd); save(); render(); } }, 'Retirer'))));
+  if(!dc.children.length) dc.append(h('div', { class:'empty' }, 'Aucun dividende noté.'));
+  d.append(dc);
+  if(dv && x.c) d.append(h('div', { class:'note' }, 'Rendement perçu : ' + PP.format(dv / x.c) + ' du prix d’achat'));
+  const dt = h('input', { type:'date', value:new Date().toISOString().slice(0, 10) }), am = numIn();
+  d.append(h('div', { class:'card form', style:'margin-top:12px' }, fld('Date', dt), fld('Montant reçu (€)', am),
+    h('button', { class:'btn full', onclick:() => {
+      const n = parseFloat(am.value); if(!(n > 0) || !dt.value){ am.focus(); return; }
+      (l.divs = l.divs || []).push({ d:dt.value, amt:n }); save(); render();
+    } }, 'Ajouter le dividende')));
+  d.append(h('button', { class:'link del', style:'margin-top:20px', onclick:() => {
+    if(confirm('Supprimer « ' + l.name + ' » ?')){ e.lines = e.lines.filter(z => z !== l); save(); go('#/e/' + eid); }
+  } }, 'Supprimer cette ligne'));
+  return d;
+}
+function vOnb(){
+  const keys = Object.keys(TYPES);
+  if(S.step >= keys.length){ S.step = null; S.done = true; save(); history.replaceState(null, '', '#/'); return vHome(); }
+  const type = keys[S.step], t = TYPES[type];
+  const next = () => { S.step++; yes = false; save(); render(); };
+  const d = h('div', null, h('h1', null, 'État des lieux · ' + (S.step + 1) + ' sur ' + keys.length),
+    h('div', { class:'bar' }, h('i', { style:'width:' + (S.step / keys.length * 100) + '%' })),
+    h('div', { class:'total', style:'font-size:28px;margin-top:18px' }, t.n));
+  if(!yes){
+    d.append(h('div', { class:'note' }, 'Possèdes-tu cette enveloppe ou ce type d’actif ?'),
+      h('div', { class:'btns', style:'margin-top:14px' },
+        h('button', { class:'btn', onclick:() => {
+          if(t.m){ const id = uid(); S.envs.push({ id, type, name:t.n, lines:[] }); save(); go('#/e/' + id); } else { yes = true; render(); }
+        } }, 'Oui'),
+        h('button', { class:'btn alt', onclick:next }, 'Non'),
+        S.step ? h('button', { class:'link', onclick:() => { S.step--; save(); render(); } }, 'Précédent') : null));
+  }else{
+    d.append(h('div', { class:'card', style:'margin-top:14px' }, manualForm(type, l => { S.envs.push({ id:uid(), type, name:t.n, lines:[l] }); next(); }, t.n)));
+  }
+  d.append(h('button', { class:'link', style:'margin-top:24px', onclick:() => { S.step = null; S.done = true; yes = false; save(); go('#/'); render(); } }, 'Passer le questionnaire'));
+  return d;
 }
 
-/* ---------- Recherche et ajout ---------- */
-let timer;
-$('#q').addEventListener('input', e => {
-  clearTimeout(timer);
-  const v = e.target.value.trim();
-  if(v.length < 2){ $('#results').replaceChildren(); return; }
-  timer = setTimeout(() => search(v), 350);
-});
-
-async function search(v){
-  const box = $('#results'); box.replaceChildren();
-  if(!url){ box.append(el('div', 'empty', 'Configure d’abord le relais de cours.')); return; }
-  try{
-    const { results } = await api({ action:'search', q:v });
-    if(!results.length){ box.append(el('div', 'empty', 'Aucun résultat.')); return; }
-    results.forEach(r => {
-      const b = el('button', 'res'); b.type = 'button';
-      const row = el('div', 'row');
-      const l = el('div', 'l');
-      l.append(el('div', 'n', r.name), el('div', 'm', r.symbol + ' · ' + r.exchange));
-      row.append(l, el('div', 'm', r.type));
-      b.append(row); b.onclick = () => openForm(r, box); box.append(b);
-    });
-  }catch(e){ box.append(el('div', 'empty', 'Recherche impossible. Vérifie l’adresse du relais.')); }
+/* ---------- Formulaires ---------- */
+function manualForm(type, done, dn){
+  const t = TYPES[type], nm = h('input', { type:'text', value:dn || '', placeholder:'Nom de l’actif' }), v = numIn(), c = numIn();
+  const ok = h('button', { class:'btn full', onclick:() => {
+    const val = parseFloat(v.value), cst = (t.nc || c.value === '') ? val : parseFloat(c.value);
+    if(!nm.value.trim()){ nm.focus(); return; }
+    if(!(val >= 0) || !(cst >= 0)){ v.focus(); return; }
+    done({ id:uid(), name:nm.value.trim(), val, cst, divs:[] });
+  } }, 'Ajouter');
+  return h('div', { class:'form' }, fld('Nom', nm, 1), fld('Valeur actuelle (€)', v), t.nc ? null : fld('Prix d’achat (€)', c), ok);
 }
-
-async function openForm(r, box){
-  box.replaceChildren();
-  const form = el('div', 'form');
-  const t = el('div', 'full'); t.append(el('div', 'n', r.name), el('div', 'm', r.symbol + ' · ' + r.exchange));
-  const f1 = el('div'); f1.append(el('label', null, 'Nombre de parts'));
-  const qty = el('input'); qty.type = 'number'; qty.inputMode = 'decimal'; qty.step = 'any'; qty.min = '0'; f1.append(qty);
-  const f2 = el('div'); const lb = el('label', null, 'Prix d’achat moyen'); f2.append(lb);
-  const cost = el('input'); cost.type = 'number'; cost.inputMode = 'decimal'; cost.step = 'any'; cost.min = '0'; f2.append(cost);
-  const ok = el('button', 'btn', 'Ajouter'); ok.type = 'button';
-  const no = el('button', 'btn alt', 'Annuler'); no.type = 'button';
-  form.append(t, f1, f2, ok, no); box.append(form);
-  try{ const a = await api({ symbols:r.symbol }); const q = a.quotes[r.symbol];
-       if(q && q.currency) lb.textContent = 'Prix d’achat moyen (' + (q.currency === 'GBp' ? 'GBP' : q.currency) + ')'; }catch(e){}
-  qty.focus();
-  no.onclick = () => box.replaceChildren();
-  ok.onclick = () => {
-    const n = parseFloat(qty.value), c = parseFloat(cost.value);
-    if(!(n > 0) || !(c >= 0)){ qty.focus(); return; }
-    pos.push({ symbol:r.symbol, name:r.name, qty:n, cost:c });
-    store.set('pf0.pos', pos);
-    box.replaceChildren(); $('#q').value = '';
-    refresh();
+function searchBox(e){
+  const box = h('div', { class:'list' }), cache = new Map();
+  let timer, seq = 0;
+  const inp = h('input', { type:'search', placeholder:'Nom, symbole ou ISIN…', autocomplete:'off', autocapitalize:'off' });
+  const msg = t => box.replaceChildren(h('div', { class:'empty' }, t));
+  const pick = r => {
+    const qty = numIn(), cost = numIn(), lab = h('label', null, 'Prix d’achat moyen');
+    const add = () => {
+      const n = parseFloat(qty.value), c = parseFloat(cost.value);
+      if(!(n > 0) || !(c >= 0)){ qty.focus(); return; }
+      e.lines.push({ id:uid(), m:1, sym:r.symbol, name:r.name, qty:n, cost:c, divs:[] }); save(); render(); refresh();
+    };
+    box.replaceChildren(h('div', { class:'form' },
+      h('div', { class:'full' }, h('div', { class:'n' }, r.name), h('div', { class:'m' }, r.symbol + ' · ' + r.exchange)),
+      fld('Nombre de parts', qty), h('div', null, lab, cost),
+      h('button', { class:'btn', onclick:add }, 'Ajouter'), h('button', { class:'btn alt', onclick:() => box.replaceChildren() }, 'Annuler')));
+    api({ symbols:r.symbol }).then(a => { const q = a.quotes[r.symbol]; if(q && q.currency) lab.textContent = 'Prix d’achat moyen (' + (q.currency === 'GBp' ? 'GBP' : q.currency) + ')'; }).catch(() => {});
+    qty.focus();
   };
+  const show = rs => {
+    if(!rs.length) return msg('Aucun résultat. Essaie le symbole ou un autre mot du nom.');
+    box.replaceChildren(...rs.map(r => h('button', { class:'row', onclick:() => pick(r) },
+      h('div', { class:'l' }, h('div', { class:'n' }, r.name), h('div', { class:'m' }, r.symbol + ' · ' + r.exchange)), h('div', { class:'badge' }, r.type))));
+  };
+  inp.oninput = () => {
+    clearTimeout(timer); seq++;
+    const v = inp.value.trim(); if(v.length < 2){ box.replaceChildren(); return; }
+    const k = v.toLowerCase();
+    if(cache.has(k)) return show(cache.get(k));
+    if(!S.url) return msg('Renseigne d’abord l’adresse du relais (réglages, sur l’écran d’accueil).');
+    msg('Recherche…');
+    timer = setTimeout(async () => {
+      const my = ++seq;
+      try{ const { results } = await api({ action:'search', q:v }); if(my !== seq) return; if(results.length) cache.set(k, results); show(results); }
+      catch(x){ if(my === seq) msg('Recherche impossible (' + x.message + ').'); }
+    }, 180);
+  };
+  return h('div', { class:'card list' }, h('div', { style:'padding:10px' }, inp), box);
+}
+function addEnv(){
+  const sel = h('select', null, ...Object.entries(TYPES).map(([k, t]) => h('option', { value:k }, t.n)));
+  return h('div', { class:'btns', style:'margin-top:16px;flex-wrap:nowrap' }, sel, h('button', { class:'btn', onclick:() => {
+    const k = sel.value, n = S.envs.filter(e => e.type === k).length, id = uid();
+    S.envs.push({ id, type:k, name:TYPES[k].n + (n ? ' ' + (n + 1) : ''), lines:[] }); save(); go('#/e/' + id);
+  } }, 'Ajouter'));
+}
+function exportData(){
+  const a = h('a', { href:URL.createObjectURL(new Blob([JSON.stringify(S, null, 1)], { type:'application/json' })), download:'patrimoine-' + new Date().toISOString().slice(0, 10) + '.json' });
+  document.body.append(a); a.click(); a.remove();
+}
+function settings(){
+  const u = h('input', { type:'url', placeholder:'https://script.google.com/macros/s/…/exec', autocapitalize:'off' });
+  u.value = S.url || '';
+  const file = h('input', { type:'file', accept:'application/json', style:'display:none' });
+  file.onchange = () => {
+    const f = file.files[0]; if(!f) return;
+    f.text().then(t => { const o = JSON.parse(t); if(!o || !Array.isArray(o.envs)) throw 0; S = o; save(); go('#/'); render(); refresh(); })
+      .catch(() => alert('Fichier non reconnu.'));
+  };
+  return h('details', { open:!S.url }, h('summary', null, 'Réglages et sauvegarde'), u,
+    h('div', { class:'btns' },
+      h('button', { class:'btn', onclick:() => { S.url = u.value.trim(); save(); refresh(); render(); } }, 'Enregistrer l’adresse'),
+      h('button', { class:'btn alt', onclick:exportData }, 'Exporter mes données'),
+      h('button', { class:'btn alt', onclick:() => file.click() }, 'Importer'), file),
+    h('div', { class:'note' }, 'Les données restent sur cet appareil. Exporte-les régulièrement pour les sauvegarder.'));
 }
 
-/* ---------- Réglages ---------- */
-$('#url').value = url;
-$('#saveUrl').onclick = () => {
-  url = $('#url').value.trim(); store.set('pf0.url', url);
-  $('#cfg').open = false; refresh();
-};
-
-render();
-refresh();
+/* ---------- Routeur ---------- */
+function render(){
+  if(!S.done && S.step == null && !S.envs.length){ S.step = 0; save(); }
+  const r = (location.hash || '#/').slice(2).split('/');
+  let k = r[0];
+  if(S.step != null && !k) k = 'o';
+  if(k === 'o' && S.step == null) k = '';
+  const V = { o:vOnb, c:vClass, e:vEnv, l:vLine }[k] || vHome;
+  $('#app').replaceChildren(V(...r.slice(1)));
+}
+$('#nav').append(...[['Brut', 1], ['Net'], ['Stratégie'], ['Objectifs'], ['Outils']].map(([n, on]) =>
+  h('button', { disabled:!on, 'aria-current':on ? 'page' : null, title:on ? null : 'Bientôt', onclick:on ? () => go('#/') : null }, n)));
+window.onhashchange = () => { render(); window.scrollTo(0, 0); };
+render(); refresh();
+if(S.url) api({ action:'ping' }).catch(() => {});
 setInterval(refresh, 5 * 60 * 1000);
-document.addEventListener('visibilitychange', () => { if(!document.hidden && (!stamp || Date.now() - stamp > 5 * 60 * 1000)) refresh(); });
+document.addEventListener('visibilitychange', () => { if(!document.hidden && (!M.t || Date.now() - M.t > 5 * 60 * 1000)) refresh(); });
 </script>
 </body>
 </html>
