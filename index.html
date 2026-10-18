@@ -657,6 +657,106 @@ function vStratMonth(i){
 }
 function vStratR(a, b){ return a === 'm' ? vStratMonth(+b) : vStrat(); }
 
+/* ---------- Objectifs ---------- */
+const GT = ['Résidence principale', 'Mariage', 'Enfant(s)', 'Voiture', 'Retraite', 'Autre'];
+const gl = () => (S.goals = S.goals || []);
+const fmtD = d => d.toLocaleDateString('fr-FR', { month:'long', year:'numeric' });
+const mLeft = d => Math.max(0, (d.getFullYear() - nowY()) * 12 + d.getMonth() - nowM());
+const isDone = (g, x) => x.funded >= g.target - 0.5;
+/* achats et provisions déjà prévus dans la Stratégie vers les enveloppes de l'objectif, jusqu'à l'échéance */
+function planned(g, gd){
+  let t = 0;
+  for(const y in (S.st || {})){
+    const T = S.st[y], Y = +y; if(Y < nowY() || Y > gd.getFullYear()) continue;
+    T.b.forEach(b => { if(!b.done && g.envs.includes(b.env) && (Y < gd.getFullYear() || b.m <= gd.getMonth())) t += b.amt; });
+    T.p.forEach(p => {
+      if(!g.envs.includes(p.env)) return;
+      for(let m = (Y === nowY() ? nowM() : 0); m <= (Y < gd.getFullYear() ? 11 : gd.getMonth()); m++)
+        if(m >= (p.f || 0) && !(T.pd[m] || []).includes(p.id)) t += p.amt;
+    });
+  }
+  return t;
+}
+/* répartition des enveloppes entre objectifs : par échéance croissante, sans double comptage */
+function goalCalc(){
+  const rem = {}, out = {};
+  S.envs.forEach(e => { const a = agg(e.lines); rem[e.id] = Math.max(0, a.v - (S.gm === 'brut' ? 0 : taxe(e))); });
+  gl().slice().sort((a, b) => a.date.localeCompare(b.date)).forEach(g => {
+    let need = g.target; const parts = [];
+    g.envs.forEach(id => { if(rem[id] == null) return; const take = Math.min(rem[id], need); rem[id] -= take; need -= take; parts.push({ id, amt:take }); });
+    out[g.id] = { funded:g.target - need, parts };
+  });
+  return out;
+}
+function vGoals(){
+  const gs = gl().slice().sort((a, b) => a.date.localeCompare(b.date)), C = goalCalc();
+  const tot = gs.reduce((a, g) => a + g.target, 0), fu = gs.reduce((a, g) => a + C[g.id].funded, 0), ok = gs.filter(g => isDone(g, C[g.id])).length;
+  const mode = S.gm === 'brut' ? 'brut' : 'net';
+  const chips = h('div', { class:'chips', style:'margin-top:14px' },
+    h('button', { class:'chip', 'aria-pressed':String(mode === 'net'), onclick:() => { S.gm = 'net'; save(); render(); } }, 'Après impôts (net)'),
+    h('button', { class:'chip', 'aria-pressed':String(mode === 'brut'), onclick:() => { S.gm = 'brut'; save(); render(); } }, 'Avant impôts (brut)'));
+  const d = h('div', null, h('h1', null, 'Objectifs'), h('div', { class:'total' }, gs.length ? ok + ' sur ' + gs.length + ' atteint' + (ok > 1 ? 's' : '') : 'Aucun objectif'));
+  if(gs.length) d.append(h('div', { class:'tiles' }, tile('Déjà financé', E0.format(fu), 'sur ' + E0.format(tot)), tile('Reste à financer', E0.format(tot - fu), gs.length - ok + ' objectif(s) en cours')), chips);
+  d.append(h('button', { class:'btn', style:'width:100%;margin-top:14px', onclick:() => go('#/g/new') }, '+ Nouvel objectif'), h('h2', null, 'Mes objectifs'));
+  const card = h('div', { class:'card list' });
+  gs.forEach(g => {
+    const x = C[g.id], pct = Math.min(1, x.funded / g.target), done = isDone(g, x), gd = new Date(g.date), late = !done && gd < new Date();
+    card.append(h('button', { class:'row', onclick:() => go('#/g/' + g.id) },
+      h('div', { class:'l' }, h('div', { class:'n' }, g.name), h('div', { class:'m' + (done ? ' up' : late ? ' down' : '') }, done ? 'Objectif atteint ✓' : late ? 'Échéance dépassée' : fmtD(gd) + ' · ' + mLeft(gd) + ' mois'),
+        h('div', { class:'bar' }, h('i', { style:'width:' + pct * 100 + '%;background:' + (done ? 'var(--up)' : 'var(--accent)') }))),
+      h('div', { class:'r' }, h('div', { class:'n' }, E0.format(x.funded)), h('div', { class:'m' }, P0.format(pct) + ' de ' + E0.format(g.target)))));
+  });
+  if(!gs.length) card.append(h('div', { class:'empty' }, 'Achat de la résidence principale, mariage, enfants, voiture, retraite… Fixe un montant, une échéance et les enveloppes qui le financent.'));
+  d.append(card);
+  return d;
+}
+function vGoal(id){
+  const g = gl().find(x => x.id === id); if(!g) return vGoals();
+  const x = goalCalc()[id], gd = new Date(g.date), done = isDone(g, x), ml = mLeft(gd), gap = Math.max(0, g.target - x.funded), pl = planned(g, gd), rest = Math.max(0, gap - pl);
+  const rw = (k, v, sub, strong) => h('div', { class:'row' }, h('div', { class:'l' }, h('div', { class:strong ? 'n' : '' }, k), sub ? h('div', { class:'m' }, sub) : null), h('div', { class:'r n' }, v));
+  const d = h('div', null, back('#/g', 'Objectifs'), h('h1', null, g.type + ' · ' + g.name), h('div', { class:'total' + (done ? ' up' : '') }, done ? 'Objectif atteint ✓' : P0.format(Math.min(1, x.funded / g.target))),
+    h('div', { class:'bar', style:'height:10px;margin-top:12px' }, h('i', { style:'width:' + Math.min(100, x.funded / g.target * 100) + '%;background:' + (done ? 'var(--up)' : 'var(--accent)') })));
+  const rows = [rw('Objectif', E0.format(g.target), 'pour ' + fmtD(gd) + (ml ? ' · dans ' + ml + ' mois' : ''), 0), rw('Déjà financé', E0.format(x.funded), S.gm === 'brut' ? 'valeur brute des enveloppes' : 'valeur après impôts latents', 0)];
+  if(!done){
+    rows.push(rw('Reste à financer', E0.format(gap), '', 1));
+    if(pl) rows.push(rw('Déjà prévu par ta stratégie', E0.format(pl), 'achats et provisions à venir vers ces enveloppes', 0));
+    rows.push(ml ? rw('À mettre de côté', E0.format(rest / ml) + ' /mois', 'sans rendement, en plus de ce qui est déjà prévu', 1) : rw('Échéance atteinte ou dépassée', '', 'ajuste la date ou le montant', 1));
+  }
+  d.append(h('div', { class:'card list', style:'margin-top:14px' }, ...rows), h('h2', null, 'Financé par'));
+  const fc = h('div', { class:'card list' });
+  x.parts.forEach(p => {
+    const e = S.envs.find(z => z.id === p.id), sh = gl().filter(o => o.id !== id && o.envs.includes(p.id)).length;
+    fc.append(row(e.name, TYPES[e.type].c + (sh ? ' · partagée avec ' + sh + ' autre(s) objectif(s)' : ''), { v:p.amt, c:0 }, '#/e/' + e.id));
+  });
+  if(!fc.children.length) fc.append(h('div', { class:'empty' }, 'Aucune enveloppe liée : modifie l’objectif pour en choisir.'));
+  d.append(fc, h('div', { class:'note' }, 'Quand une enveloppe finance plusieurs objectifs, elle est répartie par échéance : le plus proche est servi en premier.'),
+    h('div', { class:'btns', style:'margin-top:16px' }, h('button', { class:'btn alt', onclick:() => go('#/g/edit/' + id) }, 'Modifier'),
+      h('button', { class:'link del', onclick:() => { if(confirm('Supprimer « ' + g.name + ' » ?')){ S.goals = gl().filter(o => o.id !== id); save(); go('#/g'); } } }, 'Supprimer')));
+  return d;
+}
+function vGoalForm(id){
+  const g = id ? gl().find(x => x.id === id) : null; if(id && !g) return vGoals();
+  const typ = h('select', null, ...GT.map(t => h('option', { value:t }, t))), nm = h('input', { type:'text', placeholder:'Ex. Apport pour l’appartement' }), tg = numIn(), dt = h('input', { type:'date' });
+  if(g){ typ.value = g.type; nm.value = g.name; tg.value = g.target; dt.value = g.date; }
+  else typ.onchange = () => { if(!nm.value) nm.value = typ.value; };
+  if(!S.envs.length) return h('div', null, back('#/g', 'Objectifs'), h('div', { class:'note err' }, 'Crée d’abord une enveloppe dans l’onglet Brut : un objectif se finance depuis tes portefeuilles.'));
+  const checks = S.envs.map(e => { const c = h('input', { type:'checkbox' }); c.checked = !!g && g.envs.includes(e.id); return [e, c]; });
+  const box = h('div', { class:'card list' }, ...checks.map(([e, c]) => h('label', { class:'row', style:'margin:0;font-size:16px;color:var(--ink);cursor:pointer' },
+    h('div', { class:'l' }, h('div', { class:'n' }, e.name), h('div', { class:'m' }, TYPES[e.type].c + ' · ' + E0.format(agg(e.lines).v))), c)));
+  return h('div', null, back(g ? '#/g/' + id : '#/g', g ? g.name : 'Objectifs'), h('h1', null, g ? 'Modifier l’objectif' : 'Nouvel objectif'),
+    h('div', { class:'card form', style:'margin-top:12px' }, fld('Type', typ, 1), fld('Nom', nm, 1), fld('Montant visé (€)', tg), fld('Échéance', dt)),
+    h('h2', null, 'Enveloppes qui le financent'), box,
+    h('button', { class:'btn', style:'width:100%;margin-top:16px', onclick:() => {
+      const t = parseFloat(tg.value), ev = checks.filter(([, c]) => c.checked).map(([e]) => e.id);
+      if(!nm.value.trim()){ nm.focus(); return; } if(!(t > 0)){ tg.focus(); return; } if(!dt.value){ dt.focus(); return; }
+      if(!ev.length){ alert('Choisis au moins une enveloppe.'); return; }
+      const o = { id:g ? g.id : uid(), type:typ.value, name:nm.value.trim(), target:t, date:dt.value, envs:ev };
+      if(g) Object.assign(g, o); else gl().push(o);
+      save(); go('#/g/' + o.id);
+    } }, 'Enregistrer'));
+}
+function vGoalsR(a, b){ return a === 'new' ? vGoalForm(null) : a === 'edit' ? vGoalForm(b) : a ? vGoal(a) : vGoals(); }
+
 /* ---------- Routeur ---------- */
 function render(){
   if(!S.done && S.step == null && !S.envs.length){ S.step = 0; save(); }
@@ -664,13 +764,13 @@ function render(){
   let k = r[0];
   if(S.step != null && !k) k = 'o';
   if(k === 'o' && S.step == null) k = '';
-  const V = { o:vOnb, c:vClass, e:vEnv, l:vLine, n:vNetR, s:vStratR }[k] || vHome;
+  const V = { o:vOnb, c:vClass, e:vEnv, l:vLine, n:vNetR, s:vStratR, g:vGoalsR }[k] || vHome;
   $('#app').replaceChildren(V(...r.slice(1)));
   navR(k);
 }
 function navR(k){
-  const cur = k === 'n' ? 1 : k === 's' ? 2 : 0;
-  $('#nav').replaceChildren(...[['Brut', 1, '#/'], ['Net', 1, '#/n'], ['Stratégie', 1, '#/s'], ['Objectifs'], ['Outils']].map(([n, on, hr], i) =>
+  const cur = k === 'n' ? 1 : k === 's' ? 2 : k === 'g' ? 3 : 0;
+  $('#nav').replaceChildren(...[['Brut', 1, '#/'], ['Net', 1, '#/n'], ['Stratégie', 1, '#/s'], ['Objectifs', 1, '#/g'], ['Outils']].map(([n, on, hr], i) =>
     h('button', { disabled:!on, 'aria-current':on && i === cur ? 'page' : null, title:on ? null : 'Bientôt', onclick:on ? () => go(hr) : null }, n)));
 }
 window.onhashchange = () => { render(); window.scrollTo(0, 0); };
@@ -681,4 +781,3 @@ document.addEventListener('visibilitychange', () => { if(!document.hidden && (!M
 </script>
 </body>
 </html>
-
