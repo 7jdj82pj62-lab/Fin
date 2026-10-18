@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#EEF1F4">
+<title>Patrimoine – Phase 0</title>
+<style>
+:root{
+  --bg:#EEF1F4; --surface:#FFFFFF; --ink:#14202B; --muted:#5E6B78; --line:#D9DFE5;
+  --accent:#1D4ED8; --up:#13795B; --down:#B42318;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#10171E; --surface:#18222C; --ink:#E7EDF2; --muted:#93A1AE; --line:#2A3743;
+        --accent:#7CA2FF; --up:#4CC9A0; --down:#FF8A7A; color-scheme:dark}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  font-variant-numeric:tabular-nums;-webkit-text-size-adjust:100%}
+main{max-width:640px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:15px;font-weight:600;color:var(--muted);margin:0 0 6px}
+.total{font-size:40px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
+.sub{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:6px;font-size:15px}
+.fresh{margin-top:10px;font-size:13px;color:var(--muted)}
+.fresh.err{color:var(--down)}
+.up{color:var(--up)} .down{color:var(--down)}
+section{margin-top:24px}
+h2{font-size:15px;font-weight:600;margin:0 0 8px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px}
+.row{display:flex;justify-content:space-between;gap:12px;padding:12px 14px;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.row .l{min-width:0}
+.row .n{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .m{font-size:13px;color:var(--muted)}
+.row .r{text-align:right;flex:none}
+.row button.x{background:none;border:0;color:var(--muted);font-size:13px;padding:4px 0 0;cursor:pointer}
+.empty{padding:16px 14px;color:var(--muted);font-size:15px}
+input{width:100%;font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);
+  border-radius:12px;padding:12px 14px}
+input:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.res{width:100%;text-align:left;font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px;border-top:1px solid var(--line)}
+.form .full{grid-column:1/-1}
+label{font-size:13px;color:var(--muted);display:block;margin-bottom:4px}
+.btn{font:inherit;font-weight:600;border:0;border-radius:12px;padding:12px 14px;cursor:pointer;
+  background:var(--accent);color:#fff}
+.btn.alt{background:transparent;color:var(--muted);border:1px solid var(--line)}
+@media (prefers-color-scheme:dark){.btn{color:#0B1220}}
+details{margin-top:24px;font-size:14px;color:var(--muted)}
+summary{cursor:pointer}
+details input{margin:10px 0}
+</style>
+</head>
+<body>
+<main>
+  <h1>Patrimoine côté bourse</h1>
+  <div class="total" id="total">–</div>
+  <div class="sub" id="sub"></div>
+  <div class="fresh" id="fresh"></div>
+
+  <section>
+    <h2>Ajouter une ligne</h2>
+    <div class="card">
+      <div style="padding:10px">
+        <input id="q" type="search" placeholder="Nom, symbole ou ISIN (ex. LVMH, VWCE, bitcoin)" autocomplete="off" autocapitalize="off" enterkeyhint="search">
+      </div>
+      <div id="results"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Mes lignes</h2>
+    <div class="card" id="list"></div>
+  </section>
+
+  <details id="cfg">
+    <summary>Relais de cours</summary>
+    <input id="url" type="url" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="off">
+    <button class="btn" id="saveUrl">Enregistrer l’adresse</button>
+  </details>
+</main>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+let pos = store.get('pf0.pos', []);
+let url = store.get('pf0.url', '');
+let quotes = {}, fx = { EUR: 1 }, stamp = null, failed = false;
+
+const eur = new Intl.NumberFormat('fr-FR', { style:'currency', currency:'EUR' });
+const pct = new Intl.NumberFormat('fr-FR', { style:'percent', minimumFractionDigits:2, maximumFractionDigits:2, signDisplay:'exceptZero' });
+const num = new Intl.NumberFormat('fr-FR', { maximumFractionDigits:6 });
+const money = (v, c) => { try{ return new Intl.NumberFormat('fr-FR', { style:'currency', currency:c, maximumFractionDigits:4 }).format(v); }catch(e){ return num.format(v) + ' ' + c; } };
+const hm = t => new Date(t).toLocaleString('fr-FR', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+
+function el(tag, cls, text){
+  const e = document.createElement(tag);
+  if(cls) e.className = cls;
+  if(text != null) e.textContent = text;
+  return e;
+}
+
+/* ---------- Relais ---------- */
+async function api(params){
+  const r = await fetch(url + '?' + new URLSearchParams(params));
+  if(!r.ok) throw new Error('HTTP ' + r.status);
+  const j = await r.json();
+  if(j.error) throw new Error(j.error);
+  return j;
+}
+const norm = q => q.currency === 'GBp'
+  ? { ...q, price:q.price/100, prev:q.prev/100, currency:'GBP' } : q;
+
+async function refresh(){
+  failed = false;
+  if(!url || !pos.length){ render(); return; }
+  $('#fresh').textContent = 'Actualisation…';
+  try{
+    const a = await api({ symbols: pos.map(p => p.symbol).join(',') });
+    quotes = {};
+    for(const [s, q] of Object.entries(a.quotes)) quotes[s] = q.error ? q : norm(q);
+    const cur = [...new Set(Object.values(quotes).map(q => q.currency).filter(c => c && c !== 'EUR'))];
+    if(cur.length){
+      const b = await api({ symbols: cur.map(c => c + 'EUR=X').join(',') });
+      for(const c of cur){ const q = b.quotes[c + 'EUR=X']; fx[c] = q && q.price ? q.price : null; }
+    }
+    stamp = Date.now();
+  }catch(e){ failed = true; }
+  render();
+}
+
+/* ---------- Affichage ---------- */
+function render(){
+  const list = $('#list'); list.replaceChildren();
+  let total = 0, cost = 0, day = 0, missing = 0;
+
+  if(!pos.length){
+    list.append(el('div', 'empty', 'Aucune ligne pour l’instant. Cherche un titre ci-dessus pour commencer.'));
+  }
+  pos.forEach((p, i) => {
+    const q = quotes[p.symbol];
+    const ok = q && !q.error && q.price != null;
+    const rate = ok ? fx[q.currency] : null;
+    const row = el('div', 'row');
+    const l = el('div', 'l');
+    l.append(el('div', 'n', p.name), el('div', 'm', p.symbol + ' · ' + num.format(p.qty) + ' parts'));
+    const r = el('div', 'r');
+    if(ok && rate){
+      const v = q.price * p.qty * rate, c = p.cost * p.qty * rate;
+      const d = (q.price - q.prev) * p.qty * rate;
+      total += v; cost += c; day += d;
+      const pl = v - c;
+      r.append(el('div', 'n', eur.format(v)));
+      const m = el('div', 'm ' + (pl >= 0 ? 'up' : 'down'),
+        (pl >= 0 ? '+' : '') + eur.format(pl) + (c ? ' (' + pct.format(pl / c) + ')' : ''));
+      r.append(m);
+      r.append(el('div', 'm', money(q.price, q.currency) + ' · ' + pct.format((q.price - q.prev) / q.prev) +
+        ' · ' + new Date(q.time * 1000).toLocaleString('fr-FR', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })));
+    }else{
+      missing++;
+      r.append(el('div', 'm', url ? 'Cours indisponible' : 'En attente du relais'));
+    }
+    const x = el('button', 'x', 'Retirer'); x.type = 'button';
+    x.onclick = () => { if(confirm('Retirer « ' + p.name + ' » ?')){ pos.splice(i, 1); store.set('pf0.pos', pos); render(); refresh(); } };
+    r.append(x);
+    row.append(l, r); list.append(row);
+  });
+
+  $('#total').textContent = stamp ? eur.format(total) : '–';
+  const sub = $('#sub'); sub.replaceChildren();
+  if(stamp && cost){
+    const pl = total - cost;
+    sub.append(el('span', pl >= 0 ? 'up' : 'down', (pl >= 0 ? '+' : '') + eur.format(pl) + ' de plus-value (' + pct.format(pl / cost) + ')'));
+    sub.append(el('span', day >= 0 ? 'up' : 'down', (day >= 0 ? '+' : '') + eur.format(day) + ' sur la séance'));
+  }
+  const f = $('#fresh');
+  f.className = 'fresh' + (failed ? ' err' : '');
+  if(failed) f.textContent = 'Actualisation impossible. Vérifie l’adresse du relais ci-dessous.';
+  else if(!url) f.textContent = 'Renseigne l’adresse du relais de cours pour afficher les valeurs.';
+  else if(stamp) f.textContent = 'Actualisé le ' + hm(stamp) + (missing ? ' · ' + missing + ' ligne(s) sans cours' : '') + ' · les cours peuvent avoir jusqu’à 20 min de décalage';
+  else f.textContent = '';
+  if(!url) $('#cfg').open = true;
+}
+
+/* ---------- Recherche et ajout ---------- */
+let timer;
+$('#q').addEventListener('input', e => {
+  clearTimeout(timer);
+  const v = e.target.value.trim();
+  if(v.length < 2){ $('#results').replaceChildren(); return; }
+  timer = setTimeout(() => search(v), 350);
+});
+
+async function search(v){
+  const box = $('#results'); box.replaceChildren();
+  if(!url){ box.append(el('div', 'empty', 'Configure d’abord le relais de cours.')); return; }
+  try{
+    const { results } = await api({ action:'search', q:v });
+    if(!results.length){ box.append(el('div', 'empty', 'Aucun résultat.')); return; }
+    results.forEach(r => {
+      const b = el('button', 'res'); b.type = 'button';
+      const row = el('div', 'row');
+      const l = el('div', 'l');
+      l.append(el('div', 'n', r.name), el('div', 'm', r.symbol + ' · ' + r.exchange));
+      row.append(l, el('div', 'm', r.type));
+      b.append(row); b.onclick = () => openForm(r, box); box.append(b);
+    });
+  }catch(e){ box.append(el('div', 'empty', 'Recherche impossible. Vérifie l’adresse du relais.')); }
+}
+
+async function openForm(r, box){
+  box.replaceChildren();
+  const form = el('div', 'form');
+  const t = el('div', 'full'); t.append(el('div', 'n', r.name), el('div', 'm', r.symbol + ' · ' + r.exchange));
+  const f1 = el('div'); f1.append(el('label', null, 'Nombre de parts'));
+  const qty = el('input'); qty.type = 'number'; qty.inputMode = 'decimal'; qty.step = 'any'; qty.min = '0'; f1.append(qty);
+  const f2 = el('div'); const lb = el('label', null, 'Prix d’achat moyen'); f2.append(lb);
+  const cost = el('input'); cost.type = 'number'; cost.inputMode = 'decimal'; cost.step = 'any'; cost.min = '0'; f2.append(cost);
+  const ok = el('button', 'btn', 'Ajouter'); ok.type = 'button';
+  const no = el('button', 'btn alt', 'Annuler'); no.type = 'button';
+  form.append(t, f1, f2, ok, no); box.append(form);
+  try{ const a = await api({ symbols:r.symbol }); const q = a.quotes[r.symbol];
+       if(q && q.currency) lb.textContent = 'Prix d’achat moyen (' + (q.currency === 'GBp' ? 'GBP' : q.currency) + ')'; }catch(e){}
+  qty.focus();
+  no.onclick = () => box.replaceChildren();
+  ok.onclick = () => {
+    const n = parseFloat(qty.value), c = parseFloat(cost.value);
+    if(!(n > 0) || !(c >= 0)){ qty.focus(); return; }
+    pos.push({ symbol:r.symbol, name:r.name, qty:n, cost:c });
+    store.set('pf0.pos', pos);
+    box.replaceChildren(); $('#q').value = '';
+    refresh();
+  };
+}
+
+/* ---------- Réglages ---------- */
+$('#url').value = url;
+$('#saveUrl').onclick = () => {
+  url = $('#url').value.trim(); store.set('pf0.url', url);
+  $('#cfg').open = false; refresh();
+};
+
+render();
+refresh();
+setInterval(refresh, 5 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if(!document.hidden && (!stamp || Date.now() - stamp > 5 * 60 * 1000)) refresh(); });
+</script>
+</body>
+</html>
