@@ -89,7 +89,7 @@ const ls = {
 /* ---------- Modèle : enveloppes → lignes ---------- */
 const TYPES = {
   pea:{n:'PEA', c:'Bourse', m:1}, cto:{n:'CTO', c:'Bourse', m:1}, crypto:{n:'Cryptos', c:'Crypto', m:1},
-  es:{n:'Épargne salariale', c:'Épargne'}, av:{n:'Assurance vie', c:'Épargne'},
+  es:{n:'Épargne salariale', c:'Épargne', mx:1}, av:{n:'Assurance vie', c:'Épargne', mx:1},
   la:{n:'Livret A', c:'Épargne', nc:1}, lj:{n:'Livret jeune', c:'Épargne', nc:1},
   cf:{n:'Immobilier crowdfunding', c:'Immobilier'}, im:{n:'Immobilier', c:'Immobilier'},
   au:{n:'Autres actifs (montres, voiture, or…)', c:'Autres'}
@@ -224,8 +224,10 @@ function vEnv(id){
     card.append(row(l.name, (l.m ? l.sym + ' · ' + N.format(l.qty) + ' parts' : '') + (x ? '' : ' · cours indisponible'), x || { v:0, c:0 }, '#/l/' + e.id + '/' + l.id));
   });
   if(!e.lines.length) card.append(h('div', { class:'empty' }, 'Aucune ligne pour l’instant.'));
-  d.append(card, h('h2', null, t.m ? 'Ajouter un titre' : 'Ajouter un actif'));
-  d.append(t.m ? searchBox(e) : h('div', { class:'card' }, manualForm(e.type, l => { e.lines.push(l); save(); render(); }, '')));
+  d.append(card);
+  if(t.m || t.mx) d.append(h('h2', null, t.mx ? 'Ajouter des parts cotées (action, fonds coté…)' : 'Ajouter un titre'), searchBox(e));
+  if(!t.m) d.append(h('h2', null, t.mx ? 'Ajouter un fonds (montant + plus-value)' : 'Ajouter un actif'),
+    h('div', { class:'card' }, manualForm(e.type, l => { e.lines.push(l); save(); render(); }, '')));
   d.append(h('button', { class:'link del', style:'margin-top:20px', onclick:() => {
     if(confirm('Supprimer « ' + e.name + ' » et toutes ses lignes ?')){ S.envs = S.envs.filter(x => x !== e); save(); go('#/'); }
   } }, 'Supprimer cette enveloppe'));
@@ -239,11 +241,15 @@ function vLine(eid, lid){
     const q = M.q[l.sym];
     if(q && q.price != null) d.append(h('div', { class:'note' }, 'Dernier cours : ' + money(q.price, q.currency) + ' · ' + P.format((q.price - q.prev) / q.prev) + ' sur la séance'));
   }
-  const ed = l.m ? [['Nombre de parts', 'qty'], ['Prix d’achat moyen', 'cost']] : [['Valeur actuelle (€)', 'val']].concat(t.nc ? [] : [['Prix d’achat (€)', 'cst']]);
+  const ed = l.m ? [['Nombre de parts', 'qty'], ['Prix d’achat moyen', 'cost']] : [['Montant actuel (€)', 'val']].concat(t.nc ? [] : [['Prix d’achat (€)', 'cst']]);
   const ins = ed.map(([lab, k]) => { const i = numIn(); i.value = l[k]; return [lab, k, i]; });
-  d.append(h('h2', null, 'Position'), h('div', { class:'card form' }, ...ins.map(([lab, , i]) => fld(lab, i)),
+  const pvI = (!l.m && !t.nc) ? h('input', { type:'number', inputmode:'decimal', step:'any' }) : null;
+  if(pvI) pvI.value = +((l.val || 0) - (l.cst || 0)).toFixed(2);
+  const pv0 = pvI && pvI.value;
+  d.append(h('h2', null, 'Position'), h('div', { class:'card form' }, ...ins.map(([lab, , i]) => fld(lab, i)), pvI ? fld('ou plus-value (€)', pvI) : null,
     h('button', { class:'btn full', onclick:() => {
       ins.forEach(([, k, i]) => { const n = parseFloat(i.value); if(n >= 0) l[k] = n; });
+      if(pvI && pvI.value !== pv0){ const p = parseFloat(pvI.value); if(!isNaN(p)) l.cst = l.val - p; }
       if(t.nc && !l.m) l.cst = l.val;
       save(); render(); refresh();
     } }, 'Enregistrer')));
@@ -292,13 +298,16 @@ function vOnb(){
 /* ---------- Formulaires ---------- */
 function manualForm(type, done, dn){
   const t = TYPES[type], nm = h('input', { type:'text', value:dn || '', placeholder:'Nom de l’actif' }), v = numIn(), c = numIn();
+  const p = h('input', { type:'number', inputmode:'decimal', step:'any', placeholder:'ex. 250 ou -120' });
   const ok = h('button', { class:'btn full', onclick:() => {
-    const val = parseFloat(v.value), cst = (t.nc || c.value === '') ? val : parseFloat(c.value);
+    const val = parseFloat(v.value);
+    let cst = val;
+    if(!t.nc){ if(c.value !== '') cst = parseFloat(c.value); else if(p.value !== '') cst = val - parseFloat(p.value); }
     if(!nm.value.trim()){ nm.focus(); return; }
-    if(!(val >= 0) || !(cst >= 0)){ v.focus(); return; }
+    if(!(val >= 0) || isNaN(cst)){ v.focus(); return; }
     done({ id:uid(), name:nm.value.trim(), val, cst, divs:[] });
   } }, 'Ajouter');
-  return h('div', { class:'form' }, fld('Nom', nm, 1), fld('Valeur actuelle (€)', v), t.nc ? null : fld('Prix d’achat (€)', c), ok);
+  return h('div', { class:'form' }, fld('Nom', nm, 1), fld('Montant actuel (€)', v), t.nc ? null : fld('Prix d’achat (€)', c), t.nc ? null : fld('ou plus-value (€)', p), ok);
 }
 function searchBox(e){
   const box = h('div', { class:'list' }), cache = new Map();
@@ -367,6 +376,90 @@ function settings(){
     h('div', { class:'note' }, 'Les données restent sur cet appareil. Exporte-les régulièrement pour les sauvegarder.'));
 }
 
+/* ---------- Patrimoine net : frais et impôts ---------- */
+const fp = e => agg(e.lines).v * (e.fee || 0) / 100, fx = e => e.fix || 0, fees = e => fp(e) + fx(e);
+const taxe = e => { const a = agg(e.lines); return Math.max(0, a.v - a.c) * (e.tax || 0) / 100; };
+const todo = e => e.fee == null && e.fix == null && e.tax == null;
+const sums = es => es.reduce((o, e) => { o.p += fp(e); o.x += fx(e); o.f += fees(e); o.t += taxe(e); return o; }, { p:0, x:0, f:0, t:0 });
+
+function vNet(){
+  const a = agg(allLines()), s = sums(S.envs), net = a.v - s.t, pc = x => a.v ? PP.format(x / a.v) : '–';
+  const d = h('div', null, h('h1', null, 'Patrimoine net'), h('div', { class:'total' }, E0.format(net)),
+    h('div', { class:'sub' }, h('span', null, 'Brut ' + E0.format(a.v)), h('span', { class:'down' }, E0.format(s.t) + ' d’impôts latents'), h('span', { class:'down' }, E0.format(s.f) + ' de frais par an')));
+  if(!S.envs.length){ d.append(h('div', { class:'note' }, 'Ajoute d’abord tes enveloppes dans l’onglet Brut.')); return d; }
+  d.append(h('div', { class:'bar', style:'height:10px;margin-top:14px' }, h('i', { style:'width:' + (a.v ? net / a.v * 100 : 0) + '%' })),
+    h('div', { class:'note' }, 'Impôts latents : ' + pc(s.t) + ' du brut · Frais : ' + pc(s.f) + ' du patrimoine chaque année'));
+  const n = S.envs.filter(todo).length;
+  if(n) d.append(h('div', { class:'note err' }, n + ' enveloppe(s) sans frais ni impôts renseignés : ouvre une classe ci-dessous.'));
+  d.append(h('h2', null, 'Par classe d’actifs'));
+  const card = h('div', { class:'card list' });
+  CLASSES.forEach((c, i) => {
+    const es = classEnvs(c); if(!es.length) return;
+    const x = sums(es), g = agg(es.flatMap(e => e.lines));
+    card.append(h('button', { class:'row', onclick:() => go('#/n/c/' + i) },
+      h('div', { class:'l' }, h('div', { class:'n' }, c), h('div', { class:'m' }, E0.format(g.v) + ' brut')),
+      h('div', { class:'r' }, h('div', { class:'n down' }, E0.format(x.f) + ' /an'), h('div', { class:'m' }, E0.format(x.t) + ' d’impôts latents'))));
+  });
+  d.append(card, projCard(a.v, s));
+  return d;
+}
+function vNetClass(i){
+  const c = CLASSES[i]; if(!c) return vNet();
+  const es = classEnvs(c), x = sums(es);
+  const card = h('div', { class:'card list' });
+  es.forEach(e => {
+    const g = agg(e.lines), f = fees(e);
+    card.append(h('button', { class:'row', onclick:() => go('#/n/e/' + e.id) },
+      h('div', { class:'l' }, h('div', { class:'n' }, e.name), h('div', { class:'m' }, todo(e) ? 'Frais et impôts à renseigner' : E0.format(g.v) + ' brut · ' + (g.v ? PP.format(f / g.v) : '–') + ' de frais/an')),
+      h('div', { class:'r' }, h('div', { class:'n down' }, E0.format(f) + ' /an'), h('div', { class:'m' }, E0.format(taxe(e)) + ' d’impôts'))));
+  });
+  return h('div', null, back('#/n', 'Patrimoine net'), h('h1', null, c), h('div', { class:'total' }, E0.format(x.f) + ' /an'),
+    h('div', { class:'sub' }, h('span', null, E0.format(x.t) + ' d’impôts latents')), h('h2', null, 'Enveloppes'), card);
+}
+function vNetEnv(id){
+  const e = S.envs.find(x => x.id === id); if(!e) return vNet();
+  const g = agg(e.lines), c = TYPES[e.type].c, up = '#/n/c/' + CLASSES.indexOf(c);
+  const mk = (k, ph) => { const i = h('input', { type:'number', inputmode:'decimal', step:'any', min:'0', placeholder:ph }); if(e[k] != null) i.value = e[k]; return i; };
+  const fee = mk('fee', '0'), fix = mk('fix', '0'), tax = mk('tax', '0');
+  return h('div', null, back(up, c), h('h1', null, e.name), h('div', { class:'total' }, E0.format(fees(e)) + ' /an'),
+    h('div', { class:'sub' }, h('span', null, E0.format(taxe(e)) + ' d’impôts latents sur ' + E0.format(Math.max(0, g.v - g.c)) + ' de plus-value')),
+    h('h2', null, 'Frais et impôts'),
+    h('div', { class:'card form' }, fld('Frais de gestion annuels (% de l’encours)', fee), fld('Frais fixes annuels (€)', fix), fld('Impôt sur la plus-value (%)', tax, 1),
+      h('button', { class:'btn full', onclick:() => {
+        [['fee', fee], ['fix', fix], ['tax', tax]].forEach(([k, i]) => { const n = parseFloat(i.value); if(i.value === '') delete e[k]; else if(n >= 0) e[k] = n; });
+        save(); go(up);
+      } }, 'Enregistrer')),
+    h('div', { class:'note' }, 'Les taux dépendent de l’enveloppe et de ta situation (ancienneté, tranche, régime). Renseigne ceux de ton contrat.'));
+}
+function vNetR(a, b){ return a === 'c' ? vNetClass(b) : a === 'e' ? vNetEnv(b) : vNet(); }
+
+function projCard(v, s){
+  const st = S.proj || (S.proj = { r:5, n:20 }), nI = numIn(), rI = numIn(), out = h('div');
+  nI.value = st.n; rI.value = st.r; rI.removeAttribute('min');
+  const upd = () => {
+    const n = Math.min(60, Math.max(1, parseInt(nI.value) || st.n)), r = parseFloat(rI.value);
+    st.n = n; if(!isNaN(r)) st.r = r; save(); out.replaceChildren(...projOut(v, s, st));
+  };
+  nI.oninput = rI.oninput = upd; upd();
+  return h('div', null, h('h2', null, 'Projection des frais composés'),
+    h('div', { class:'card form' }, fld('Horizon (années)', nI), fld('Rendement brut annuel (%, hypothèse)', rI)), out);
+}
+function projOut(v, s, st){
+  if(!v) return [h('div', { class:'note' }, 'Ajoute du patrimoine pour lancer la simulation.')];
+  const r = st.r / 100, rate = s.p / v, A = [v], B = [v];
+  let a = v, b = v, paid = 0;
+  for(let y = 1; y <= st.n; y++){
+    a *= 1 + r; const f = b * rate + s.x; b = Math.max(0, b * (1 + r) - f); paid += f; A.push(a); B.push(b);
+  }
+  const cost = a - b, W = 320, H = 120, mx = Math.max(...A) || 1, pts = z => z.map((q, i) => (i / (z.length - 1) * W).toFixed(1) + ',' + (H - q / mx * H).toFixed(1)).join(' ');
+  const svg = h('div'); svg.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="Capital avec et sans frais" style="display:block;overflow:visible;margin:14px 0 6px">' +
+    '<polyline fill="none" stroke="var(--muted)" stroke-width="2" stroke-dasharray="4 4" points="' + pts(A) + '"/>' +
+    '<polyline fill="none" stroke="var(--accent)" stroke-width="2.5" points="' + pts(B) + '"/></svg>';
+  const line = (k, x, c) => h('div', { class:'row' }, h('div', { class:'l' }, k), h('div', { class:'r n ' + (c || '') }, E0.format(x)));
+  return [h('div', { class:'card list', style:'margin-top:12px' }, line('Capital sans frais (pointillé)', a), line('Capital avec frais', b), line('Coût total des frais', cost, 'down')),
+    svg, h('div', { class:'note' }, 'Sur ' + st.n + ' ans : ' + E0.format(paid) + ' de frais payés et ' + E0.format(Math.max(0, cost - paid)) + ' de croissance perdue. Simulation sur ton patrimoine actuel, sans nouveaux versements.')];
+}
+
 /* ---------- Routeur ---------- */
 function render(){
   if(!S.done && S.step == null && !S.envs.length){ S.step = 0; save(); }
@@ -374,11 +467,14 @@ function render(){
   let k = r[0];
   if(S.step != null && !k) k = 'o';
   if(k === 'o' && S.step == null) k = '';
-  const V = { o:vOnb, c:vClass, e:vEnv, l:vLine }[k] || vHome;
+  const V = { o:vOnb, c:vClass, e:vEnv, l:vLine, n:vNetR }[k] || vHome;
   $('#app').replaceChildren(V(...r.slice(1)));
+  navR(k);
 }
-$('#nav').append(...[['Brut', 1], ['Net'], ['Stratégie'], ['Objectifs'], ['Outils']].map(([n, on]) =>
-  h('button', { disabled:!on, 'aria-current':on ? 'page' : null, title:on ? null : 'Bientôt', onclick:on ? () => go('#/') : null }, n)));
+function navR(k){
+  $('#nav').replaceChildren(...[['Brut', 1, '#/'], ['Net', 1, '#/n'], ['Stratégie'], ['Objectifs'], ['Outils']].map(([n, on, hr], i) =>
+    h('button', { disabled:!on, 'aria-current':on && ((i === 1) === (k === 'n')) ? 'page' : null, title:on ? null : 'Bientôt', onclick:on ? () => go(hr) : null }, n)));
+}
 window.onhashchange = () => { render(); window.scrollTo(0, 0); };
 render(); refresh();
 if(S.url) api({ action:'ping' }).catch(() => {});
