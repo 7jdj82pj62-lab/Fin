@@ -44,6 +44,7 @@ button.row{cursor:pointer}
 .badge{font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:2px 8px;flex:none}
 input,select{width:100%;font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
 select{flex:1}
+input[type=checkbox]{width:auto}
 input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .form{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px}
 .full{grid-column:1/-1}
@@ -309,12 +310,12 @@ function manualForm(type, done, dn){
   } }, 'Ajouter');
   return h('div', { class:'form' }, fld('Nom', nm, 1), fld('Montant actuel (€)', v), t.nc ? null : fld('Prix d’achat (€)', c), t.nc ? null : fld('ou plus-value (€)', p), ok);
 }
-function searchBox(e){
+function searchBox(e, onPick){
   const box = h('div', { class:'list' }), cache = new Map();
   let timer, seq = 0;
   const inp = h('input', { type:'search', placeholder:'Nom, symbole ou ISIN…', autocomplete:'off', autocapitalize:'off' });
   const msg = t => box.replaceChildren(h('div', { class:'empty' }, t));
-  const pick = r => {
+  const pick0 = r => {
     const qty = numIn(), cost = numIn(), lab = h('label', null, 'Prix d’achat moyen');
     const add = () => {
       const n = parseFloat(qty.value), c = parseFloat(cost.value);
@@ -328,6 +329,7 @@ function searchBox(e){
     api({ symbols:r.symbol }).then(a => { const q = a.quotes[r.symbol]; if(q && q.currency) lab.textContent = 'Prix d’achat moyen (' + (q.currency === 'GBp' ? 'GBP' : q.currency) + ')'; }).catch(() => {});
     qty.focus();
   };
+  const pick = r => onPick ? onPick(r, box) : pick0(r);
   const show = rs => {
     if(!rs.length) return msg('Aucun résultat. Essaie le symbole ou un autre mot du nom.');
     box.replaceChildren(...rs.map(r => h('button', { class:'row', onclick:() => pick(r) },
@@ -460,6 +462,142 @@ function projOut(v, s, st){
     svg, h('div', { class:'note' }, 'Sur ' + st.n + ' ans : ' + E0.format(paid) + ' de frais payés et ' + E0.format(Math.max(0, cost - paid)) + ' de croissance perdue. Simulation sur ton patrimoine actuel, sans nouveaux versements.')];
 }
 
+/* ---------- Stratégie annuelle ---------- */
+const MOIS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+let sy = new Date().getFullYear();
+function ST(y){ S.st = S.st || {}; return S.st[y] = S.st[y] || { b:[], p:[], pd:{} }; }
+const nowM = () => new Date().getMonth(), nowY = () => new Date().getFullYear();
+const dueB = (b, y) => !b.done && (y < nowY() || (y === nowY() && b.m <= nowM()));
+const envName = id => (S.envs.find(e => e.id === id) || { name:'enveloppe supprimée' }).name;
+const doneE = b => b.done ? (b.done.e != null ? b.done.e : b.amt) : 0;
+function pendProv(y){
+  const T = ST(y), last = y < nowY() ? 11 : y === nowY() ? nowM() : -1, o = [];
+  T.p.forEach(p => { for(let m = p.f || 0; m <= last; m++) if(!(T.pd[m] || []).includes(p.id)) o.push({ p, m }); });
+  return o;
+}
+async function quote(sym){
+  if(!S.url) throw new Error('relais non configuré');
+  const a = await api({ symbols:sym }), q = a.quotes[sym];
+  if(!q || q.error || q.price == null) throw new Error('cours indisponible');
+  const n = norm(q); let fxr = 1;
+  if(n.currency !== 'EUR'){
+    const b = await api({ symbols:n.currency + 'EUR=X' }), x = b.quotes[n.currency + 'EUR=X'];
+    if(!x || !x.price) throw new Error('taux de change indisponible');
+    fxr = x.price;
+  }
+  return { p:n.price, c:n.currency, fx:fxr };
+}
+function applyBuy(b, qty, price, fxr){
+  const e = S.envs.find(x => x.id === b.env); if(!e){ alert('Enveloppe introuvable.'); return; }
+  const l = e.lines.find(x => x.m && x.sym === b.sym);
+  if(l){ const nq = l.qty + qty; l.cost = (l.cost * l.qty + price * qty) / nq; l.qty = nq; }
+  else e.lines.push({ id:uid(), m:1, sym:b.sym, name:b.name, qty, cost:price, divs:[] });
+  b.done = { t:Date.now(), q:qty, p:price, e:qty * price * fxr };
+  save(); render(); refresh();
+}
+function applyProv(p, m, y){
+  const e = S.envs.find(x => x.id === p.env); if(!e){ alert('Enveloppe introuvable.'); return; }
+  const nm = 'Provision · ' + p.name;
+  let l = e.lines.find(x => !x.m && x.name === nm);
+  if(!l){ l = { id:uid(), name:nm, val:0, cst:0, divs:[] }; e.lines.push(l); }
+  l.val += p.amt; l.cst += p.amt;
+  const T = ST(y); (T.pd[m] = T.pd[m] || []).push(p.id);
+  save(); render();
+}
+async function confirmBuy(b, box){
+  box.replaceChildren(h('div', { class:'empty' }, 'Récupération du cours…'));
+  let q = null, err = '';
+  try{ q = await quote(b.sym); }catch(e){ err = e.message; }
+  const pI = numIn(), qI = numIn(), fxr = q ? q.fx : 1;
+  if(q){ pI.value = +q.p.toFixed(4); qI.value = +(b.amt / (q.p * fxr)).toFixed(4); }
+  pI.oninput = () => { const p = parseFloat(pI.value); if(p > 0) qI.value = +(b.amt / (p * fxr)).toFixed(4); };
+  box.replaceChildren(h('div', { class:'form', style:'border-top:1px solid var(--line)' },
+    err ? h('div', { class:'note err full' }, 'Cours indisponible (' + err + '). Saisis le prix payé, dans la devise du titre.')
+        : h('div', { class:'note full' }, 'Cours actuel pré-rempli (' + q.c + '). Ajuste avec ton prix d’exécution réel.'),
+    fld('Prix par part' + (q ? ' (' + q.c + ')' : ''), pI), fld('Nombre de parts', qI),
+    h('button', { class:'btn', onclick:() => { const p = parseFloat(pI.value), n = parseFloat(qI.value); if(!(p > 0) || !(n > 0)) return; applyBuy(b, n, p, fxr); } }, 'Confirmer l’achat'),
+    h('button', { class:'btn alt', onclick:() => box.replaceChildren() }, 'Annuler')));
+}
+const small = 'padding:8px 14px';
+function vStrat(){
+  const y = sy, T = ST(y), pb = T.b.filter(b => dueB(b, y)), pp = pendProv(y);
+  const dn = T.b.filter(b => b.done), tot = T.b.reduce((a, b) => a + b.amt, 0), inv = dn.reduce((a, b) => a + doneE(b), 0);
+  const d = h('div', null,
+    h('div', { class:'btns', style:'justify-content:space-between;flex-wrap:nowrap;align-items:center' },
+      h('button', { class:'link', onclick:() => { sy--; render(); } }, '‹ ' + (y - 1)), h('h1', { style:'margin:0' }, 'Stratégie ' + y),
+      h('button', { class:'link', onclick:() => { sy++; render(); } }, (y + 1) + ' ›')),
+    h('div', { class:'total', style:'margin-top:10px' }, E0.format(inv) + ' investis'),
+    h('div', { class:'sub' }, h('span', null, dn.length + ' sur ' + T.b.length + ' achats validés'), h('span', null, E0.format(tot) + ' prévus')),
+    h('div', { class:'bar', style:'height:10px;margin-top:12px' }, h('i', { style:'width:' + (T.b.length ? dn.length / T.b.length * 100 : 0) + '%' })),
+    h('h2', null, 'À valider'));
+  const card = h('div', { class:'card list' });
+  pb.forEach(b => { const box = h('div');
+    card.append(h('div', null, h('div', { class:'row' },
+      h('div', { class:'l' }, h('div', { class:'n' }, b.name), h('div', { class:'m' }, MOIS[b.m] + ' · ' + envName(b.env) + ' · ' + E0.format(b.amt))),
+      h('button', { class:'btn', style:small, onclick:() => confirmBuy(b, box) }, 'Valider')), box)); });
+  pp.forEach(({ p, m }) => card.append(h('div', { class:'row' },
+    h('div', { class:'l' }, h('div', { class:'n' }, 'Provision · ' + p.name), h('div', { class:'m' }, MOIS[m] + ' · vers ' + envName(p.env) + ' · ' + E0.format(p.amt))),
+    h('button', { class:'btn', style:small, onclick:() => applyProv(p, m, y) }, 'Valider'))));
+  if(!card.children.length) card.append(h('div', { class:'empty' }, 'Rien à valider pour l’instant.'));
+  d.append(card, h('h2', null, 'Plan de l’année'));
+  const pl = h('div', { class:'card list' });
+  MOIS.forEach((n, i) => {
+    const bs = T.b.filter(b => b.m === i), t = bs.reduce((a, b) => a + b.amt, 0), ok = bs.length && bs.every(b => b.done);
+    pl.append(h('button', { class:'row', onclick:() => go('#/s/m/' + i) },
+      h('div', { class:'l' }, h('div', { class:'n' }, n + (y === nowY() && i === nowM() ? ' · ce mois-ci' : '')), h('div', { class:'m' }, bs.length ? bs.map(b => b.name).join(', ') : 'Aucun achat prévu')),
+      h('div', { class:'r n' + (ok ? ' up' : '') }, bs.length ? E0.format(t) + (ok ? ' ✓' : '') : '+')));
+  });
+  d.append(pl, h('h2', null, 'Provisions mensuelles'), provCard(y));
+  return d;
+}
+function provCard(y){
+  const T = ST(y), tot = T.p.reduce((a, p) => a + p.amt, 0), c = h('div', { class:'card list' });
+  T.p.forEach(p => c.append(h('div', { class:'row' },
+    h('div', { class:'l' }, h('div', { class:'n' }, p.name), h('div', { class:'m' }, 'Vers ' + envName(p.env) + ' · ' + E0.format(p.amt * 12) + ' par an')),
+    h('div', { class:'r' }, h('div', { class:'n' }, E0.format(p.amt) + ' /mois'), h('button', { class:'link del', onclick:() => { T.p = T.p.filter(z => z !== p); save(); render(); } }, 'Retirer')))));
+  if(!T.p.length) c.append(h('div', { class:'empty' }, 'Ex. assurance annuelle, impôts, cadeaux : un virement mensuel vers ton livret.'));
+  const tg = S.envs.filter(e => !TYPES[e.type].m);
+  const nm = h('input', { type:'text', placeholder:'Ex. Assurance habitation' }), am = numIn(), sel = h('select', null, ...tg.map(e => h('option', { value:e.id }, e.name)));
+  const la = tg.find(e => e.type === 'la'); if(la) sel.value = la.id;
+  const f = h('div', { class:'card form', style:'margin-top:12px' }, fld('Nom', nm, 1), fld('Montant mensuel (€)', am), fld('Enveloppe cible', sel),
+    h('button', { class:'btn full', onclick:() => {
+      const n = parseFloat(am.value);
+      if(!nm.value.trim()){ nm.focus(); return; } if(!(n > 0)){ am.focus(); return; }
+      T.p.push({ id:uid(), name:nm.value.trim(), amt:n, env:sel.value, f:y === nowY() ? nowM() : 0 }); save(); render();
+    } }, 'Ajouter la provision'));
+  return h('div', null, c, tg.length ? f : h('div', { class:'note err' }, 'Crée d’abord un livret ou une enveloppe d’épargne dans l’onglet Brut.'),
+    tot ? h('div', { class:'note' }, 'Total provisionné : ' + E0.format(tot) + ' par mois, ' + E0.format(tot * 12) + ' par an.') : null);
+}
+function vStratMonth(i){
+  const y = sy, T = ST(y), bs = T.b.filter(b => b.m === i); if(!MOIS[i]) return vStrat();
+  const d = h('div', null, back('#/s', 'Stratégie ' + y), h('h1', null, MOIS[i] + ' ' + y), h('div', { class:'total' }, E0.format(bs.reduce((a, b) => a + b.amt, 0)) + ' prévus'), h('h2', null, 'Achats du mois'));
+  const c = h('div', { class:'card list' });
+  bs.forEach(b => { const box = h('div');
+    c.append(h('div', null, h('div', { class:'row' },
+      h('div', { class:'l' }, h('div', { class:'n' }, b.name), h('div', { class:'m' }, envName(b.env) + ' · ' + E0.format(b.amt) + (b.done ? ' · validé le ' + new Date(b.done.t).toLocaleDateString('fr-FR') + ' (' + N.format(b.done.q) + ' parts)' : ''))),
+      h('div', { class:'r' }, b.done ? h('div', { class:'n up' }, '✓') : dueB(b, y) ? h('button', { class:'btn', style:small, onclick:() => confirmBuy(b, box) }, 'Valider') : null,
+        h('div', null, h('button', { class:'link del', onclick:() => { if(confirm('Retirer « ' + b.name + ' » du plan ?')){ T.b = T.b.filter(z => z !== b); save(); render(); } } }, 'Retirer')))), box)); });
+  if(!bs.length) c.append(h('div', { class:'empty' }, 'Aucun achat prévu ce mois-ci.'));
+  const onPick = (r, box) => {
+    const mk = S.envs.filter(e => TYPES[e.type].m || TYPES[e.type].mx);
+    if(!mk.length){ box.replaceChildren(h('div', { class:'empty' }, 'Crée d’abord une enveloppe PEA, CTO ou Cryptos dans l’onglet Brut.')); return; }
+    const am = numIn(), sel = h('select', null, ...mk.map(e => h('option', { value:e.id }, e.name))), rep = h('input', { type:'checkbox' });
+    box.replaceChildren(h('div', { class:'form' },
+      h('div', { class:'full' }, h('div', { class:'n' }, r.name), h('div', { class:'m' }, r.symbol + ' · ' + r.exchange)),
+      fld('Montant à investir (€)', am), fld('Dans quelle enveloppe ?', sel),
+      h('label', { class:'full', style:'display:flex;gap:8px;align-items:center;margin:0' }, rep, 'Répéter chaque mois jusqu’à décembre'),
+      h('button', { class:'btn', onclick:() => {
+        const n = parseFloat(am.value); if(!(n > 0)){ am.focus(); return; }
+        for(let m = i; m <= (rep.checked ? 11 : i); m++) T.b.push({ id:uid(), m, sym:r.symbol, name:r.name, env:sel.value, amt:n, done:null });
+        save(); render();
+      } }, 'Ajouter au plan'),
+      h('button', { class:'btn alt', onclick:() => box.replaceChildren() }, 'Annuler')));
+  };
+  d.append(c, h('h2', null, 'Ajouter un achat'), searchBox(null, onPick));
+  return d;
+}
+function vStratR(a, b){ return a === 'm' ? vStratMonth(+b) : vStrat(); }
+
 /* ---------- Routeur ---------- */
 function render(){
   if(!S.done && S.step == null && !S.envs.length){ S.step = 0; save(); }
@@ -467,13 +605,14 @@ function render(){
   let k = r[0];
   if(S.step != null && !k) k = 'o';
   if(k === 'o' && S.step == null) k = '';
-  const V = { o:vOnb, c:vClass, e:vEnv, l:vLine, n:vNetR }[k] || vHome;
+  const V = { o:vOnb, c:vClass, e:vEnv, l:vLine, n:vNetR, s:vStratR }[k] || vHome;
   $('#app').replaceChildren(V(...r.slice(1)));
   navR(k);
 }
 function navR(k){
-  $('#nav').replaceChildren(...[['Brut', 1, '#/'], ['Net', 1, '#/n'], ['Stratégie'], ['Objectifs'], ['Outils']].map(([n, on, hr], i) =>
-    h('button', { disabled:!on, 'aria-current':on && ((i === 1) === (k === 'n')) ? 'page' : null, title:on ? null : 'Bientôt', onclick:on ? () => go(hr) : null }, n)));
+  const cur = k === 'n' ? 1 : k === 's' ? 2 : 0;
+  $('#nav').replaceChildren(...[['Brut', 1, '#/'], ['Net', 1, '#/n'], ['Stratégie', 1, '#/s'], ['Objectifs'], ['Outils']].map(([n, on, hr], i) =>
+    h('button', { disabled:!on, 'aria-current':on && i === cur ? 'page' : null, title:on ? null : 'Bientôt', onclick:on ? () => go(hr) : null }, n)));
 }
 window.onhashchange = () => { render(); window.scrollTo(0, 0); };
 render(); refresh();
