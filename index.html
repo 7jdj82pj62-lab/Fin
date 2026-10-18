@@ -9,28 +9,30 @@
 <style>
 :root{
   --bg:#EEF1F4; --surface:#FFFFFF; --ink:#14202B; --muted:#5E6B78; --line:#D9DFE5;
-  --accent:#1D4ED8; --up:#13795B; --down:#B42318;
+  --accent:#1D4ED8; --up:#13795B; --down:#B42318; --warn:#B26A00;
+  --c0:#2F5BE0; --c1:#E08A1E; --c2:#1E9E78; --c3:#8A5CD0; --c4:#7C8A99;
   box-sizing:border-box; color-scheme:light;
   padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
 }
 @media (prefers-color-scheme:dark){
   :root{--bg:#10171E; --surface:#18222C; --ink:#E7EDF2; --muted:#93A1AE; --line:#2A3743;
-        --accent:#7CA2FF; --up:#4CC9A0; --down:#FF8A7A; color-scheme:dark}
+        --accent:#7CA2FF; --up:#4CC9A0; --down:#FF8A7A; --warn:#F0A94A;
+        --c0:#7CA2FF; --c1:#F0A94A; --c2:#4CC9A0; --c3:#B28CF0; --c4:#9AA7B4; color-scheme:dark}
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   font-variant-numeric:tabular-nums;-webkit-text-size-adjust:100%}
 main{max-width:640px;margin:0 auto;padding:16px 16px 28px}
 h1{font-size:15px;font-weight:600;color:var(--muted);margin:0 0 6px}
-h2{font-size:15px;font-weight:600;margin:24px 0 8px}
-.total{font-size:40px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
+h2{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:28px 0 8px}
+.total{font-size:36px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
 .sub{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px;font-size:15px}
 .note{font-size:13px;color:var(--muted);margin-top:8px}
 .note.err{color:var(--down)}
 .up{color:var(--up)} .down{color:var(--down)}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
 .list>*+*{border-top:1px solid var(--line)}
-.row{display:flex;justify-content:space-between;gap:12px;align-items:center;width:100%;padding:12px 14px;border:0;background:none;
+.row{display:flex;justify-content:space-between;gap:12px;align-items:center;width:100%;padding:14px;border:0;background:none;
   text-align:left;font:inherit;color:inherit}
 button.row{cursor:pointer}
 .row .l{min-width:0;flex:1}
@@ -58,6 +60,32 @@ label{display:block;font-size:13px;color:var(--muted);margin-bottom:4px}
 details{margin-top:24px;font-size:14px;color:var(--muted)}
 summary{cursor:pointer}
 details input{margin:10px 0}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;min-width:0}
+.tile.w2{grid-column:1/-1}
+.tile .k{font-size:12px;color:var(--muted)}
+.tile .v{font-size:20px;font-weight:700;margin-top:2px;letter-spacing:-.01em}
+.tile .s{font-size:12px;color:var(--muted);margin-top:2px}
+.seg{display:flex;height:12px;border-radius:6px;overflow:hidden;gap:2px;margin-top:4px}
+.seg i{display:block;height:100%;min-width:3px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;flex:none}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{font:inherit;font-size:14px;padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.chip[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
+@media (prefers-color-scheme:dark){.chip[aria-pressed=true]{color:#0B1220}}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.mtile{font:inherit;color:inherit;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 10px 8px;cursor:pointer;min-width:0}
+.mtile .k{font-size:12px;color:var(--muted)}
+.mtile .v{font-size:15px;font-weight:700;margin-top:2px}
+.mtile .s{font-size:11px;color:var(--muted);min-height:15px}
+.mtile.cur{border-color:var(--accent);border-width:2px}
+.mtile.ok{border-color:var(--up)} .mtile.ok .s{color:var(--up)}
+.mtile.late{border-color:var(--warn)} .mtile.late .s{color:var(--warn);font-weight:600}
+.pill{font-size:12px;padding:2px 8px;border-radius:999px;background:var(--accent);color:#fff;margin-left:6px;text-transform:none;letter-spacing:0}
+@media (prefers-color-scheme:dark){.pill{color:#0B1220}}
+.link:disabled{opacity:.3;cursor:default}
+.toast{position:fixed;left:16px;right:16px;bottom:calc(76px + env(safe-area-inset-bottom,0px));max-width:608px;margin:0 auto;background:var(--ink);color:var(--bg);
+  padding:12px 14px;border-radius:12px;font-size:14px;z-index:9;box-shadow:0 6px 20px rgba(0,0,0,.25)}
 nav{position:sticky;bottom:0;display:flex;background:var(--surface);border-top:1px solid var(--line)}
 nav button{flex:1;font:inherit;font-size:12px;padding:12px 2px;background:none;border:0;color:var(--muted)}
 nav button[aria-current]{color:var(--accent);font-weight:600}
@@ -162,6 +190,11 @@ async function refresh(){
 
 /* ---------- Composants ---------- */
 const go = x => { location.hash = x; };
+const tile = (k, v, sub, c, wide) => h('div', { class:'tile' + (wide ? ' w2' : '') }, h('div', { class:'k' }, k), h('div', { class:'v ' + (c || '') }, v), sub ? h('div', { class:'s' }, sub) : null);
+function toast(t){
+  document.querySelectorAll('.toast').forEach(x => x.remove());
+  const x = h('div', { class:'toast', role:'status' }, t); document.body.append(x); setTimeout(() => x.remove(), 3800);
+}
 const back = (href, t) => h('button', { class:'link', onclick:() => go(href) }, '‹ ' + t);
 const numIn = () => h('input', { type:'number', inputmode:'decimal', step:'any', min:'0' });
 const fld = (lab, i, full) => h('div', { class:full ? 'full' : null }, h('label', null, lab), i);
@@ -191,19 +224,31 @@ function row(n, m, x, href){
 
 /* ---------- Écrans ---------- */
 function vHome(){
-  const a = agg(allLines());
-  const d = h('div', null, head('Patrimoine brut', a), note(a), h('h2', null, 'Répartition'));
-  const card = h('div', { class:'card list' });
-  CLASSES.forEach((c, i) => {
-    const es = classEnvs(c); if(!es.length) return;
-    const x = agg(es.flatMap(e => e.lines)), part = a.v ? x.v / a.v : 0, pv = x.v - x.c;
-    card.append(h('button', { class:'row', onclick:() => go('#/c/' + i) },
-      h('div', { class:'l' }, h('div', { class:'n' }, c), h('div', { class:'m' }, P0.format(part) + ' du total'),
-        h('div', { class:'bar' }, h('i', { style:'width:' + part * 100 + '%' }))),
-      h('div', { class:'r' }, h('div', { class:'n' }, E0.format(x.v)), x.c && Math.abs(pv) >= 0.5 ? h('div', { class:'m ' + cls(pv) }, sg(pv)) : null)));
-  });
-  if(!card.children.length) card.append(h('div', { class:'empty' }, 'Ajoute une enveloppe pour voir ton patrimoine.'));
-  d.append(card, addEnv(), settings());
+  const L = allLines(), a = agg(L), pv = a.v - a.c;
+  const d = h('div', null, h('h1', null, 'Patrimoine brut'), h('div', { class:'total' }, E0.format(a.v)), note(a));
+  if(a.v) d.append(h('div', { class:'tiles' },
+    tile('Plus-value latente', sg(pv), a.c ? P.format(pv / a.c) + ' sur ' + E0.format(a.c) + ' investis' : '', a.c ? cls(pv) : '', 1),
+    L.some(l => l.m) ? tile('Variation du jour', sg(a.d), a.v - a.d ? P.format(a.d / (a.v - a.d)) : '', cls(a.d)) : null,
+    tile('Dividendes perçus', E0.format(a.dv), a.c && a.dv ? PP.format(a.dv / a.c) + ' du capital investi' : '')));
+  const cs = CLASSES.map((c, i) => { const es = classEnvs(c); return { c, i, n:es.length, x:agg(es.flatMap(e => e.lines)) }; }).filter(o => o.n).sort((p, q) => q.x.v - p.x.v);
+  if(cs.length){
+    d.append(h('h2', null, 'Répartition'));
+    if(a.v) d.append(h('div', { class:'seg' }, ...cs.filter(o => o.x.v > 0).map(o => h('i', { style:'flex:' + o.x.v + ';background:var(--c' + o.i + ')', title:o.c }))));
+    const card = h('div', { class:'card list', style:'margin-top:12px' });
+    cs.forEach(o => {
+      const p = o.x.v - o.x.c;
+      card.append(h('button', { class:'row', onclick:() => go('#/c/' + o.i) },
+        h('span', { class:'dot', style:'background:var(--c' + o.i + ')' }),
+        h('div', { class:'l' }, h('div', { class:'n' }, o.c), h('div', { class:'m' }, (a.v ? P0.format(o.x.v / a.v) : '0 %') + ' du patrimoine')),
+        h('div', { class:'r' }, h('div', { class:'n' }, E0.format(o.x.v)), o.x.c && Math.abs(p) >= 0.5 ? h('div', { class:'m ' + cls(p) }, sg(p)) : null)));
+    });
+    d.append(card, h('h2', null, 'Mes enveloppes'));
+    const el = h('div', { class:'card list' });
+    S.envs.map(e => [e, agg(e.lines)]).sort((p, q) => q[1].v - p[1].v)
+      .forEach(([e, x]) => el.append(row(e.name, TYPES[e.type].c + (a.v ? ' · ' + P0.format(x.v / a.v) : ''), x, '#/e/' + e.id)));
+    d.append(el);
+  }else d.append(h('h2', null, 'Répartition'), h('div', { class:'card' }, h('div', { class:'empty' }, 'Ajoute une enveloppe pour voir ton patrimoine.')));
+  d.append(addEnv(), settings());
   return d;
 }
 function vClass(i){
@@ -220,9 +265,9 @@ function vEnv(id){
   if(S.step != null) d.append(h('button', { class:'btn', style:'margin-top:14px', onclick:() => { S.step++; save(); go('#/o'); } }, 'Étape suivante du questionnaire'));
   d.append(h('h2', null, 'Lignes'));
   const card = h('div', { class:'card list' });
-  e.lines.forEach(l => {
-    const x = val(l);
-    card.append(row(l.name, (l.m ? l.sym + ' · ' + N.format(l.qty) + ' parts' : '') + (x ? '' : ' · cours indisponible'), x || { v:0, c:0 }, '#/l/' + e.id + '/' + l.id));
+  e.lines.map(l => [l, val(l)]).sort((p, q) => (q[1] ? q[1].v : 0) - (p[1] ? p[1].v : 0)).forEach(([l, x]) => {
+    const meta = [l.m ? l.sym + ' · ' + N.format(l.qty) + ' parts' : null, x && a.v ? P0.format(x.v / a.v) + ' de l’enveloppe' : null, x ? null : 'cours indisponible'].filter(Boolean).join(' · ');
+    card.append(row(l.name, meta, x || { v:0, c:0 }, '#/l/' + e.id + '/' + l.id));
   });
   if(!e.lines.length) card.append(h('div', { class:'empty' }, 'Aucune ligne pour l’instant.'));
   d.append(card);
@@ -385,22 +430,24 @@ const todo = e => e.fee == null && e.fix == null && e.tax == null;
 const sums = es => es.reduce((o, e) => { o.p += fp(e); o.x += fx(e); o.f += fees(e); o.t += taxe(e); return o; }, { p:0, x:0, f:0, t:0 });
 
 function vNet(){
-  const a = agg(allLines()), s = sums(S.envs), net = a.v - s.t, pc = x => a.v ? PP.format(x / a.v) : '–';
-  const d = h('div', null, h('h1', null, 'Patrimoine net'), h('div', { class:'total' }, E0.format(net)),
-    h('div', { class:'sub' }, h('span', null, 'Brut ' + E0.format(a.v)), h('span', { class:'down' }, E0.format(s.t) + ' d’impôts latents'), h('span', { class:'down' }, E0.format(s.f) + ' de frais par an')));
+  const a = agg(allLines()), s = sums(S.envs), net = a.v - s.t, pc = x => a.v ? PP.format(x / a.v) : '–', td = S.envs.filter(todo);
+  const d = h('div', null, h('h1', null, 'Patrimoine net'), h('div', { class:'total' }, E0.format(net)));
   if(!S.envs.length){ d.append(h('div', { class:'note' }, 'Ajoute d’abord tes enveloppes dans l’onglet Brut.')); return d; }
-  d.append(h('div', { class:'bar', style:'height:10px;margin-top:14px' }, h('i', { style:'width:' + (a.v ? net / a.v * 100 : 0) + '%' })),
-    h('div', { class:'note' }, 'Impôts latents : ' + pc(s.t) + ' du brut · Frais : ' + pc(s.f) + ' du patrimoine chaque année'));
-  const n = S.envs.filter(todo).length;
-  if(n) d.append(h('div', { class:'note err' }, n + ' enveloppe(s) sans frais ni impôts renseignés : ouvre une classe ci-dessous.'));
-  d.append(h('h2', null, 'Par classe d’actifs'));
+  d.append(h('div', { class:'note' }, 'Ce qu’il te resterait après impôts sur les plus-values si tu vendais tout aujourd’hui.'));
+  const br = (k, sub, v, strong) => h('div', { class:'row' }, h('div', { class:'l' }, h('div', { class:strong ? 'n' : '' }, k), sub ? h('div', { class:'m' }, sub) : null), h('div', { class:'r n' }, v));
+  d.append(h('div', { class:'card list', style:'margin-top:14px' }, br('Patrimoine brut', '', E0.format(a.v)), br('Impôts latents', pc(s.t) + ' du brut', '− ' + E0.format(s.t)), br('Patrimoine net', '', E0.format(net), 1)),
+    h('div', { class:'tiles' }, tile('Frais par an', E0.format(s.f), pc(s.f) + ' du patrimoine'), tile('Frais par mois', E0.format(s.f / 12), 'en moyenne')));
+  if(td.length) d.append(h('div', { class:'card', style:'margin-top:14px;padding:14px' }, h('div', { class:'n' }, td.length + ' enveloppe(s) à compléter'),
+    h('div', { class:'m', style:'margin:4px 0 12px' }, 'Tant que les frais et impôts ne sont pas saisis, le net est surestimé.'),
+    h('button', { class:'btn', onclick:() => { S.nw = 1; save(); go('#/n/e/' + td[0].id); } }, 'Compléter maintenant')));
+  const cs = CLASSES.map((c, i) => ({ c, i, es:classEnvs(c) })).filter(o => o.es.length).map(o => ({ ...o, x:sums(o.es) })).sort((p, q) => q.x.f - p.x.f);
+  d.append(h('h2', null, 'Où partent les frais'));
   const card = h('div', { class:'card list' });
-  CLASSES.forEach((c, i) => {
-    const es = classEnvs(c); if(!es.length) return;
-    const x = sums(es), g = agg(es.flatMap(e => e.lines));
-    card.append(h('button', { class:'row', onclick:() => go('#/n/c/' + i) },
-      h('div', { class:'l' }, h('div', { class:'n' }, c), h('div', { class:'m' }, E0.format(g.v) + ' brut')),
-      h('div', { class:'r' }, h('div', { class:'n down' }, E0.format(x.f) + ' /an'), h('div', { class:'m' }, E0.format(x.t) + ' d’impôts latents'))));
+  cs.forEach(o => {
+    const share = s.f ? o.x.f / s.f : 0;
+    card.append(h('button', { class:'row', onclick:() => go('#/n/c/' + o.i) }, h('span', { class:'dot', style:'background:var(--c' + o.i + ')' }),
+      h('div', { class:'l' }, h('div', { class:'n' }, o.c), h('div', { class:'m' }, E0.format(o.x.t) + ' d’impôts latents'), h('div', { class:'bar' }, h('i', { style:'width:' + share * 100 + '%;background:var(--c' + o.i + ')' }))),
+      h('div', { class:'r' }, h('div', { class:'n' }, E0.format(o.x.f) + ' /an'), h('div', { class:'m' }, P0.format(share) + ' des frais'))));
   });
   d.append(card, projCard(a.v, s));
   return d;
@@ -413,38 +460,45 @@ function vNetClass(i){
     const g = agg(e.lines), f = fees(e);
     card.append(h('button', { class:'row', onclick:() => go('#/n/e/' + e.id) },
       h('div', { class:'l' }, h('div', { class:'n' }, e.name), h('div', { class:'m' }, todo(e) ? 'Frais et impôts à renseigner' : E0.format(g.v) + ' brut · ' + (g.v ? PP.format(f / g.v) : '–') + ' de frais/an')),
-      h('div', { class:'r' }, h('div', { class:'n down' }, E0.format(f) + ' /an'), h('div', { class:'m' }, E0.format(taxe(e)) + ' d’impôts'))));
+      h('div', { class:'r' }, h('div', { class:'n' }, E0.format(f) + ' /an'), h('div', { class:'m' }, E0.format(taxe(e)) + ' d’impôts'))));
   });
   return h('div', null, back('#/n', 'Patrimoine net'), h('h1', null, c), h('div', { class:'total' }, E0.format(x.f) + ' /an'),
     h('div', { class:'sub' }, h('span', null, E0.format(x.t) + ' d’impôts latents')), h('h2', null, 'Enveloppes'), card);
 }
 function vNetEnv(id){
   const e = S.envs.find(x => x.id === id); if(!e) return vNet();
-  const g = agg(e.lines), c = TYPES[e.type].c, up = '#/n/c/' + CLASSES.indexOf(c);
+  const g = agg(e.lines), c = TYPES[e.type].c, up = '#/n/c/' + CLASSES.indexOf(c), pvv = Math.max(0, g.v - g.c);
   const mk = (k, ph) => { const i = h('input', { type:'number', inputmode:'decimal', step:'any', min:'0', placeholder:ph }); if(e[k] != null) i.value = e[k]; return i; };
-  const fee = mk('fee', '0'), fix = mk('fix', '0'), tax = mk('tax', '0');
-  return h('div', null, back(up, c), h('h1', null, e.name), h('div', { class:'total' }, E0.format(fees(e)) + ' /an'),
-    h('div', { class:'sub' }, h('span', null, E0.format(taxe(e)) + ' d’impôts latents sur ' + E0.format(Math.max(0, g.v - g.c)) + ' de plus-value')),
+  const fee = mk('fee', '0'), fix = mk('fix', '0'), tax = mk('tax', '0'), prev = h('div', { class:'note' });
+  const upd = () => { prev.textContent = 'Estimation : ' + E0.format(g.v * (parseFloat(fee.value) || 0) / 100 + (parseFloat(fix.value) || 0)) + ' de frais par an · ' + E0.format(pvv * (parseFloat(tax.value) || 0) / 100) + ' d’impôts latents sur ' + E0.format(pvv) + ' de plus-value'; };
+  fee.oninput = fix.oninput = tax.oninput = upd; upd();
+  const next = () => { const n = S.envs.find(x => todo(x) && x.id !== e.id); if(S.nw && n) go('#/n/e/' + n.id); else { S.nw = 0; save(); go(up); } };
+  const rest = S.envs.filter(todo).length;
+  const set = (f, x, t) => { [['fee', f], ['fix', x], ['tax', t]].forEach(([k, v]) => { if(v === '') delete e[k]; else if(v >= 0) e[k] = v; }); save(); next(); };
+  return h('div', null, back(up, c), h('h1', null, e.name), h('div', { class:'total' }, E0.format(g.v)),
+    S.nw && rest ? h('div', { class:'note' }, 'Il reste ' + rest + ' enveloppe(s) à compléter.') : null,
     h('h2', null, 'Frais et impôts'),
     h('div', { class:'card form' }, fld('Frais de gestion annuels (% de l’encours)', fee), fld('Frais fixes annuels (€)', fix), fld('Impôt sur la plus-value (%)', tax, 1),
-      h('button', { class:'btn full', onclick:() => {
-        [['fee', fee], ['fix', fix], ['tax', tax]].forEach(([k, i]) => { const n = parseFloat(i.value); if(i.value === '') delete e[k]; else if(n >= 0) e[k] = n; });
-        save(); go(up);
-      } }, 'Enregistrer')),
+      h('div', { class:'full' }, prev),
+      h('button', { class:'btn full', onclick:() => { const n = x => x.value === '' ? '' : parseFloat(x.value); set(n(fee), n(fix), n(tax)); } }, S.nw ? 'Enregistrer et continuer' : 'Enregistrer'),
+      h('button', { class:'btn alt full', onclick:() => set(0, 0, 0) }, 'Aucun frais ni impôt'),
+      S.nw ? h('button', { class:'link full', onclick:() => { S.nw = 0; save(); go(up); } }, 'Plus tard') : null),
     h('div', { class:'note' }, 'Les taux dépendent de l’enveloppe et de ta situation (ancienneté, tranche, régime). Renseigne ceux de ton contrat.'));
 }
 function vNetR(a, b){ return a === 'c' ? vNetClass(b) : a === 'e' ? vNetEnv(b) : vNet(); }
 
 function projCard(v, s){
-  const st = S.proj || (S.proj = { r:5, n:20 }), nI = numIn(), rI = numIn(), out = h('div');
-  nI.value = st.n; rI.value = st.r; rI.removeAttribute('min');
+  const st = S.proj || (S.proj = { r:5, n:20 }), rI = numIn(), out = h('div'), NS = [10, 20, 30, 40];
+  rI.value = st.r; rI.removeAttribute('min');
+  const bs = NS.map(n => h('button', { class:'chip', onclick:() => { st.n = n; upd(); } }, n + ' ans'));
   const upd = () => {
-    const n = Math.min(60, Math.max(1, parseInt(nI.value) || st.n)), r = parseFloat(rI.value);
-    st.n = n; if(!isNaN(r)) st.r = r; save(); out.replaceChildren(...projOut(v, s, st));
+    const r = parseFloat(rI.value); if(!isNaN(r)) st.r = r; save();
+    bs.forEach((b, i) => b.setAttribute('aria-pressed', String(NS[i] === st.n)));
+    out.replaceChildren(...projOut(v, s, st));
   };
-  nI.oninput = rI.oninput = upd; upd();
-  return h('div', null, h('h2', null, 'Projection des frais composés'),
-    h('div', { class:'card form' }, fld('Horizon (années)', nI), fld('Rendement brut annuel (%, hypothèse)', rI)), out);
+  rI.oninput = upd; upd();
+  return h('div', null, h('h2', null, 'Projection des frais composés'), h('div', { class:'chips' }, ...bs),
+    h('div', { class:'card form', style:'margin-top:12px' }, fld('Rendement brut annuel supposé (%)', rI, 1)), out);
 }
 function projOut(v, s, st){
   if(!v) return [h('div', { class:'note' }, 'Ajoute du patrimoine pour lancer la simulation.')];
@@ -454,12 +508,14 @@ function projOut(v, s, st){
     a *= 1 + r; const f = b * rate + s.x; b = Math.max(0, b * (1 + r) - f); paid += f; A.push(a); B.push(b);
   }
   const cost = a - b, W = 320, H = 120, mx = Math.max(...A) || 1, pts = z => z.map((q, i) => (i / (z.length - 1) * W).toFixed(1) + ',' + (H - q / mx * H).toFixed(1)).join(' ');
+  if(cost < 1) return [h('div', { class:'note' }, 'Aucun frais renseigné pour l’instant : complète les enveloppes ci-dessus pour voir leur effet sur la durée.')];
   const svg = h('div'); svg.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="Capital avec et sans frais" style="display:block;overflow:visible;margin:14px 0 6px">' +
     '<polyline fill="none" stroke="var(--muted)" stroke-width="2" stroke-dasharray="4 4" points="' + pts(A) + '"/>' +
     '<polyline fill="none" stroke="var(--accent)" stroke-width="2.5" points="' + pts(B) + '"/></svg>';
   const line = (k, x, c) => h('div', { class:'row' }, h('div', { class:'l' }, k), h('div', { class:'r n ' + (c || '') }, E0.format(x)));
-  return [h('div', { class:'card list', style:'margin-top:12px' }, line('Capital sans frais (pointillé)', a), line('Capital avec frais', b), line('Coût total des frais', cost, 'down')),
-    svg, h('div', { class:'note' }, 'Sur ' + st.n + ' ans : ' + E0.format(paid) + ' de frais payés et ' + E0.format(Math.max(0, cost - paid)) + ' de croissance perdue. Simulation sur ton patrimoine actuel, sans nouveaux versements.')];
+  return [h('div', { style:'margin-top:16px' }, h('div', { class:'m' }, 'Sur ' + st.n + ' ans, tes frais te coûteraient'), h('div', { class:'total down', style:'font-size:30px' }, E0.format(cost))),
+    h('div', { class:'card list', style:'margin-top:12px' }, line('Capital sans frais (pointillé)', a), line('Capital avec frais (trait plein)', b), line('Frais payés', paid), line('Croissance perdue', Math.max(0, cost - paid))),
+    svg, h('div', { class:'note' }, 'Simulation sur ton patrimoine actuel, sans nouveaux versements, avec un rendement supposé constant.')];
 }
 
 /* ---------- Stratégie annuelle ---------- */
@@ -494,6 +550,7 @@ function applyBuy(b, qty, price, fxr){
   else e.lines.push({ id:uid(), m:1, sym:b.sym, name:b.name, qty, cost:price, divs:[] });
   b.done = { t:Date.now(), q:qty, p:price, e:qty * price * fxr };
   save(); render(); refresh();
+  toast('Achat validé : ' + N.format(+qty.toFixed(4)) + ' part(s) de ' + b.name + ' ajoutée(s) à « ' + e.name + ' »');
 }
 function applyProv(p, m, y){
   const e = S.envs.find(x => x.id === p.env); if(!e){ alert('Enveloppe introuvable.'); return; }
@@ -503,6 +560,7 @@ function applyProv(p, m, y){
   l.val += p.amt; l.cst += p.amt;
   const T = ST(y); (T.pd[m] = T.pd[m] || []).push(p.id);
   save(); render();
+  toast(E0.format(p.amt) + ' provisionnés sur « ' + e.name + ' »');
 }
 async function confirmBuy(b, box){
   box.replaceChildren(h('div', { class:'empty' }, 'Récupération du cours…'));
@@ -519,17 +577,18 @@ async function confirmBuy(b, box){
     h('button', { class:'btn alt', onclick:() => box.replaceChildren() }, 'Annuler')));
 }
 const small = 'padding:8px 14px';
+const MS = ['Janv.', 'Févr.', 'Mars', 'Avr.', 'Mai', 'Juin', 'Juil.', 'Août', 'Sept.', 'Oct.', 'Nov.', 'Déc.'];
 function vStrat(){
-  const y = sy, T = ST(y), pb = T.b.filter(b => dueB(b, y)), pp = pendProv(y);
-  const dn = T.b.filter(b => b.done), tot = T.b.reduce((a, b) => a + b.amt, 0), inv = dn.reduce((a, b) => a + doneE(b), 0);
+  const y = sy, T = ST(y), pb = T.b.filter(b => dueB(b, y)), pp = pendProv(y), nb = pb.length + pp.length;
+  const dn = T.b.filter(b => b.done), inv = dn.reduce((a, b) => a + doneE(b), 0), left = T.b.filter(b => !b.done).reduce((a, b) => a + b.amt, 0);
   const d = h('div', null,
     h('div', { class:'btns', style:'justify-content:space-between;flex-wrap:nowrap;align-items:center' },
-      h('button', { class:'link', onclick:() => { sy--; render(); } }, '‹ ' + (y - 1)), h('h1', { style:'margin:0' }, 'Stratégie ' + y),
+      h('button', { class:'link', onclick:() => { sy--; render(); } }, '‹ ' + (y - 1)), h('h1', { style:'margin:0;font-size:17px;color:var(--ink)' }, 'Stratégie ' + y),
       h('button', { class:'link', onclick:() => { sy++; render(); } }, (y + 1) + ' ›')),
-    h('div', { class:'total', style:'margin-top:10px' }, E0.format(inv) + ' investis'),
-    h('div', { class:'sub' }, h('span', null, dn.length + ' sur ' + T.b.length + ' achats validés'), h('span', null, E0.format(tot) + ' prévus')),
-    h('div', { class:'bar', style:'height:10px;margin-top:12px' }, h('i', { style:'width:' + (T.b.length ? dn.length / T.b.length * 100 : 0) + '%' })),
-    h('h2', null, 'À valider'));
+    h('div', { class:'tiles' }, tile('Investi', E0.format(inv), dn.length + ' achat(s) validé(s)'), tile('Reste à investir', E0.format(left), (T.b.length - dn.length) + ' achat(s) prévu(s)')),
+    h('div', { class:'bar', style:'height:8px;margin-top:12px' }, h('i', { style:'width:' + (T.b.length ? dn.length / T.b.length * 100 : 0) + '%' })),
+    h('button', { class:'btn', style:'width:100%;margin-top:14px', onclick:() => go('#/s/m/' + (y === nowY() ? nowM() : 0)) }, '+ Planifier un achat'),
+    h('h2', null, 'À valider', nb ? h('span', { class:'pill' }, nb) : null));
   const card = h('div', { class:'card list' });
   pb.forEach(b => { const box = h('div');
     card.append(h('div', null, h('div', { class:'row' },
@@ -538,16 +597,16 @@ function vStrat(){
   pp.forEach(({ p, m }) => card.append(h('div', { class:'row' },
     h('div', { class:'l' }, h('div', { class:'n' }, 'Provision · ' + p.name), h('div', { class:'m' }, MOIS[m] + ' · vers ' + envName(p.env) + ' · ' + E0.format(p.amt))),
     h('button', { class:'btn', style:small, onclick:() => applyProv(p, m, y) }, 'Valider'))));
-  if(!card.children.length) card.append(h('div', { class:'empty' }, 'Rien à valider pour l’instant.'));
+  if(!card.children.length) card.append(h('div', { class:'empty' }, 'Rien à valider pour l’instant. ✓'));
   d.append(card, h('h2', null, 'Plan de l’année'));
-  const pl = h('div', { class:'card list' });
-  MOIS.forEach((n, i) => {
-    const bs = T.b.filter(b => b.m === i), t = bs.reduce((a, b) => a + b.amt, 0), ok = bs.length && bs.every(b => b.done);
-    pl.append(h('button', { class:'row', onclick:() => go('#/s/m/' + i) },
-      h('div', { class:'l' }, h('div', { class:'n' }, n + (y === nowY() && i === nowM() ? ' · ce mois-ci' : '')), h('div', { class:'m' }, bs.length ? bs.map(b => b.name).join(', ') : 'Aucun achat prévu')),
-      h('div', { class:'r n' + (ok ? ' up' : '') }, bs.length ? E0.format(t) + (ok ? ' ✓' : '') : '+')));
+  const g = h('div', { class:'grid3' });
+  MS.forEach((n, i) => {
+    const bs = T.b.filter(b => b.m === i), t = bs.reduce((a, b) => a + b.amt, 0), ok = bs.length && bs.every(b => b.done), late = bs.some(b => dueB(b, y));
+    g.append(h('button', { class:'mtile' + (y === nowY() && i === nowM() ? ' cur' : '') + (ok ? ' ok' : '') + (late ? ' late' : ''), onclick:() => go('#/s/m/' + i) },
+      h('div', { class:'k' }, n), h('div', { class:'v' }, bs.length ? E0.format(t) : '–'),
+      h('div', { class:'s' }, bs.length ? (ok ? '✓ validé' : late ? 'à valider' : bs.length + ' achat' + (bs.length > 1 ? 's' : '')) : '')));
   });
-  d.append(pl, h('h2', null, 'Provisions mensuelles'), provCard(y));
+  d.append(g, h('h2', null, 'Provisions mensuelles'), provCard(y));
   return d;
 }
 function provCard(y){
@@ -559,18 +618,18 @@ function provCard(y){
   const tg = S.envs.filter(e => !TYPES[e.type].m);
   const nm = h('input', { type:'text', placeholder:'Ex. Assurance habitation' }), am = numIn(), sel = h('select', null, ...tg.map(e => h('option', { value:e.id }, e.name)));
   const la = tg.find(e => e.type === 'la'); if(la) sel.value = la.id;
-  const f = h('div', { class:'card form', style:'margin-top:12px' }, fld('Nom', nm, 1), fld('Montant mensuel (€)', am), fld('Enveloppe cible', sel),
+  const f = h('div', { class:'card form', style:'margin-top:10px' }, fld('Nom', nm, 1), fld('Montant mensuel (€)', am), fld('Enveloppe cible', sel),
     h('button', { class:'btn full', onclick:() => {
       const n = parseFloat(am.value);
       if(!nm.value.trim()){ nm.focus(); return; } if(!(n > 0)){ am.focus(); return; }
       T.p.push({ id:uid(), name:nm.value.trim(), amt:n, env:sel.value, f:y === nowY() ? nowM() : 0 }); save(); render();
     } }, 'Ajouter la provision'));
-  return h('div', null, c, tg.length ? f : h('div', { class:'note err' }, 'Crée d’abord un livret ou une enveloppe d’épargne dans l’onglet Brut.'),
+  return h('div', null, c, tg.length ? h('details', { style:'margin-top:12px' }, h('summary', null, '+ Ajouter une provision'), f) : h('div', { class:'note err' }, 'Crée d’abord un livret ou une enveloppe d’épargne dans l’onglet Brut.'),
     tot ? h('div', { class:'note' }, 'Total provisionné : ' + E0.format(tot) + ' par mois, ' + E0.format(tot * 12) + ' par an.') : null);
 }
 function vStratMonth(i){
   const y = sy, T = ST(y), bs = T.b.filter(b => b.m === i); if(!MOIS[i]) return vStrat();
-  const d = h('div', null, back('#/s', 'Stratégie ' + y), h('h1', null, MOIS[i] + ' ' + y), h('div', { class:'total' }, E0.format(bs.reduce((a, b) => a + b.amt, 0)) + ' prévus'), h('h2', null, 'Achats du mois'));
+  const d = h('div', null, back('#/s', 'Stratégie ' + y), h('div', { class:'btns', style:'justify-content:space-between;flex-wrap:nowrap;align-items:center' }, h('button', { class:'link', disabled:i === 0, onclick:() => go('#/s/m/' + (i - 1)) }, '‹'), h('h1', { style:'margin:0;font-size:17px;color:var(--ink)' }, MOIS[i] + ' ' + y), h('button', { class:'link', disabled:i === 11, onclick:() => go('#/s/m/' + (i + 1)) }, '›')), h('div', { class:'total' }, E0.format(bs.reduce((a, b) => a + b.amt, 0)) + ' prévus'), h('h2', null, 'Achats du mois'));
   const c = h('div', { class:'card list' });
   bs.forEach(b => { const box = h('div');
     c.append(h('div', null, h('div', { class:'row' },
