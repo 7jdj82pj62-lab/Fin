@@ -810,6 +810,188 @@ function vGoalForm(id){
 }
 function vGoalsR(a, b){ return a === 'new' ? vGoalForm(null) : a === 'edit' ? vGoalForm(b) : a ? vGoal(a) : vGoals(); }
 
+/* ---------- Outils : budget mensuel et intérêts composés ---------- */
+const DEF_CATS = ['Logement', 'Alimentation', 'Transport', 'Santé', 'Abonnements', 'Loisirs', 'Vêtements', 'Enfants', 'Autres'];
+function bud(){
+  S.bud = S.bud || { rev:0, cats:DEF_CATS.map(n => ({ id:uid(), name:n, amt:0 })), last:null, inv:null, step:0 };
+  const B = S.bud;
+  B.inv = B.inv || { c0:null, pmt:null, r:4, n:20 };
+  if(B.step === undefined) B.step = (B.rev || B.cats.some(c => c.amt)) ? null : 0;
+  return B;
+}
+const spend = () => bud().cats.reduce((a, c) => a + (c.amt || 0), 0);
+const provMonthly = () => { const T = (S.st || {})[nowY()]; return T ? T.p.reduce((a, p) => a + p.amt, 0) : 0; };
+const perfNow = () => { const a = agg(allLines()); return a.c ? (a.v - a.c) / a.c * 100 : null; };
+const fr1 = v => v.toFixed(1).replace('.', ',');
+const gotoB = (B, to) => { B.step = to; save(); render(); };
+
+function budNav(B, st, last, keep){
+  const fin = st === last;
+  return h('div', { class:'btns', style:'margin-top:18px;justify-content:space-between;flex-wrap:nowrap' },
+    st > 0 ? h('button', { class:'btn alt', onclick:() => { keep(); gotoB(B, st - 1); } }, 'Précédent') : h('span'),
+    h('button', { class:'btn', onclick:() => {
+      keep();
+      if(fin){ B.step = null; save(); render(); toast('Budget enregistré'); } else gotoB(B, st + 1);
+    } }, fin ? 'Terminer' : 'Suivant'));
+}
+
+function budQ(B){
+  const n = B.cats.length, last = n + 1, st = Math.min(Math.max(0, B.step), last);
+  const d = h('div', null, h('h1', null, 'Budget mensuel'),
+    h('div', { class:'note' }, 'Question ' + (st + 1) + ' sur ' + (last + 1)),
+    h('div', { class:'bar', style:'height:6px;margin-top:8px' }, h('i', { style:'width:' + ((st + 1) / (last + 1) * 100) + '%;background:var(--accent)' })));
+  if(st === 0){
+    const i = numIn(); i.value = B.rev || '';
+    d.append(h('div', { class:'total', style:'font-size:24px;margin-top:24px' }, 'Quels sont tes revenus nets par mois ?'),
+      h('div', { class:'card form', style:'margin-top:14px' }, fld('Revenus nets mensuels (€)', i, 1)),
+      budNav(B, st, last, () => { B.rev = Math.max(0, parseFloat(i.value) || 0); }));
+  } else if(st <= n){
+    const c = B.cats[st - 1], i = numIn(); i.value = c.amt || '';
+    d.append(h('div', { class:'total', style:'font-size:24px;margin-top:24px' }, 'Combien dépenses-tu chaque mois pour ' + c.name.toLowerCase() + ' ?'),
+      h('div', { class:'note' }, 'Mets 0 si ce poste ne te concerne pas.'),
+      h('div', { class:'card form', style:'margin-top:14px' }, fld(c.name + ' (€ / mois)', i, 1)),
+      budNav(B, st, last, () => { c.amt = Math.max(0, parseFloat(i.value) || 0); }));
+  } else {
+    const nN = h('input', { type:'text', placeholder:'Ex. Assurance auto' }), nA = numIn();
+    const list = h('div', { class:'card list', style:'margin-top:14px' });
+    B.cats.forEach((c, k) => list.append(h('div', { class:'row' },
+      h('div', { class:'l' }, h('div', { class:'n' }, c.name), h('div', { class:'m' }, E0.format(c.amt || 0) + ' / mois')),
+      h('button', { class:'link del', onclick:() => { B.cats.splice(k, 1); save(); render(); } }, 'Retirer'))));
+    d.append(h('div', { class:'total', style:'font-size:24px;margin-top:24px' }, 'Il te reste des dépenses à ajouter ?'),
+      h('div', { class:'note' }, 'Ajoute celles qui ne figurent pas dans la liste, avec leur montant mensuel.'),
+      list,
+      h('div', { class:'card form', style:'margin-top:12px' }, fld('Nouvelle catégorie', nN, 1), fld('Montant mensuel (€)', nA),
+        h('button', { class:'btn full', onclick:() => {
+          const t = nN.value.trim(); if(!t){ nN.focus(); return; }
+          B.cats.push({ id:uid(), name:t, amt:Math.max(0, parseFloat(nA.value) || 0) }); save(); render();
+        } }, 'Ajouter')),
+      budNav(B, st, last, () => {}));
+  }
+  return d;
+}
+
+function budLine(name, amt, rev, col, strong){
+  const p = rev > 0 ? amt / rev : 0;
+  return h('div', { class:'row', style:'flex-direction:column;align-items:stretch;gap:6px' },
+    h('div', { style:'display:flex;justify-content:space-between;gap:10px' },
+      h('div', { class:strong ? 'n' : '' }, h('span', { class:'dot', style:'background:' + col + ';margin-right:8px' }), name),
+      h('div', { class:'n' }, E0.format(amt) + (rev > 0 ? '  ·  ' + P0.format(p) : ''))),
+    h('div', { class:'bar', style:'margin-top:0' }, h('i', { style:'width:' + Math.max(0, Math.min(100, p * 100)) + '%;background:' + col })));
+}
+
+function budR(B){
+  const sp = spend(), cap = B.rev - sp, prov = provMonthly(), free = cap - prov, rate = B.rev ? free / B.rev : 0;
+  const cs = B.cats.map((c, k) => ({ c, col:k % 5 })).filter(o => o.c.amt > 0).sort((p, q) => q.c.amt - p.c.amt);
+  const d = h('div', null, h('h1', null, 'Budget mensuel'),
+    h('div', { class:'m' }, 'Capacité d’épargne par mois'),
+    h('div', { class:'total', style:'color:' + (cap < 0 ? 'var(--down)' : 'var(--up)') }, E0.format(cap)),
+    h('div', { class:'note' }, B.rev ? 'Revenus ' + E0.format(B.rev) + ' moins dépenses ' + E0.format(sp) : 'Renseigne tes revenus pour calculer ta capacité.'));
+  if(B.rev > 0){
+    const parts = cs.map(o => h('i', { style:'flex:' + o.c.amt + ';background:var(--c' + o.col + ')' }));
+    if(prov > 0) parts.push(h('i', { style:'flex:' + prov + ';background:var(--muted)' }));
+    if(free > 0) parts.push(h('i', { style:'flex:' + free + ';background:var(--up)' }));
+    d.append(h('div', { class:'card', style:'margin-top:14px;padding:16px' },
+      h('div', { class:'seg', style:'height:22px;margin-top:0' }, ...parts),
+      h('div', { style:'display:flex;justify-content:space-between;margin-top:10px;font-size:13px;color:var(--muted)' },
+        h('span', null, 'Dépenses'), h('span', null, 'Provisions'), h('span', { style:'color:var(--up);font-weight:600' }, 'Épargne libre'))));
+  }
+  d.append(h('div', { class:'tiles' },
+    tile('Épargne libre', E0.format(free), 'après provisions prévues', free < 0 ? 'down' : 'up'),
+    tile('Taux d’épargne', P0.format(rate), 'de tes revenus', rate < 0 ? 'down' : 'up')));
+  if(B.rev > 0 && free < 0) d.append(h('div', { class:'note err' }, 'Dépenses et provisions dépassent tes revenus.'));
+  d.append(h('h2', null, 'Détail'));
+  const card = h('div', { class:'card list' });
+  if(!cs.length) card.append(h('div', { class:'empty' }, 'Aucune dépense saisie.'));
+  cs.forEach(o => card.append(budLine(o.c.name, o.c.amt, B.rev, 'var(--c' + o.col + ')')));
+  if(prov > 0) card.append(budLine('Provisions (Stratégie)', prov, B.rev, 'var(--muted)'));
+  card.append(budLine('Épargne libre', free, B.rev, 'var(--up)', 1));
+  d.append(card, h('div', { class:'btns', style:'margin-top:14px' }, h('button', { class:'btn alt', onclick:() => gotoB(B, 0) }, 'Modifier mes réponses')));
+  return d;
+}
+
+function revueCard(B){
+  const days = B.last ? Math.floor((Date.now() - new Date(B.last).getTime()) / 86400000) : null;
+  return h('div', { class:'card', style:'padding:14px' },
+    h('div', { class:'m' }, B.last
+      ? 'Dernière revue le ' + new Date(B.last).toLocaleDateString('fr-FR') + (days > 365 ? ' · à refaire, plus d’un an' : '')
+      : 'Jamais revue. Fais-le au moins une fois par an pour maîtriser ton niveau de vie.'),
+    h('button', { class:'btn', style:'margin-top:12px;width:100%', onclick:() => {
+      B.last = new Date().toISOString().slice(0, 10); save(); render(); toast('Revue enregistrée');
+    } }, 'Marquer comme revu aujourd’hui'));
+}
+
+function vTools(){
+  const B = bud();
+  if(B.step != null) return budQ(B);
+  const d = budR(B);
+  d.append(h('h2', null, 'Revue annuelle'), revueCard(B), h('h2', null, 'Intérêts composés'), compoundCard());
+  return d;
+}
+
+function compoundCard(){
+  const B = bud(), I = B.inv, lr = Math.max(0, (B.rev - spend()) - provMonthly());
+  const c0I = numIn(), pI = numIn(), rI = numIn(), nI = numIn();
+  c0I.value = I.c0 != null ? I.c0 : Math.round(agg(allLines()).v);
+  pI.value = I.pmt != null ? I.pmt : Math.round(lr);
+  rI.value = I.r; nI.value = I.n;
+  const out = h('div');
+  const upd = () => {
+    I.c0 = Math.max(0, parseFloat(c0I.value) || 0);
+    I.pmt = Math.max(0, parseFloat(pI.value) || 0);
+    I.r = parseFloat(rI.value) || 0;
+    I.n = Math.min(60, Math.max(1, parseInt(nI.value) || I.n));
+    save(); out.replaceChildren(...compoundOut(I));
+  };
+  [c0I, pI, rI, nI].forEach(x => { x.oninput = upd; });
+  const perf = perfNow();
+  const pb = perf != null
+    ? h('div', { class:'card', style:'padding:14px;margin-bottom:10px' },
+        h('div', { class:'m' }, 'Performance actuelle de ton patrimoine (gain total sur tes prix d’achat)'),
+        h('div', { class:'total ' + (perf >= 0 ? 'up' : 'down'), style:'font-size:26px' }, (perf >= 0 ? '+' : '') + fr1(perf) + ' %'),
+        h('div', { class:'note' }, 'Ce n’est pas un rendement annuel, mais le gain cumulé depuis tes achats.'),
+        h('button', { class:'chip', style:'margin-top:8px', onclick:() => { rI.value = +perf.toFixed(2); upd(); } }, 'Utiliser ' + fr1(perf) + ' % comme rendement'))
+    : h('div', { class:'note' }, 'Performance indisponible : renseigne tes lignes avec leur prix d’achat.');
+  upd();
+  return h('div', null, pb,
+    h('div', { class:'card form' }, fld('Capital de départ (€)', c0I), fld('Versement mensuel (€)', pI), fld('Rendement annuel (%)', rI), fld('Horizon (années)', nI)),
+    out);
+}
+
+function compoundOut(I){
+  const mr = I.r / 100 / 12, N = I.n * 12, W = 320, H = 130;
+  const withV = [I.c0], noV = [I.c0], vers = [I.c0];
+  let w = I.c0, z = I.c0;
+  for(let y = 1; y <= I.n; y++){
+    for(let k = 0; k < 12; k++){ w = w * (1 + mr) + I.pmt; z = z * (1 + mr); }
+    withV.push(w); noV.push(z); vers.push(I.c0 + I.pmt * 12 * y);
+  }
+  const versé = I.c0 + I.pmt * N, gains = w - versé;
+  const mx = Math.max(...withV, I.c0) || 1;
+  const X = i => (i / I.n * W).toFixed(1), Y = q => (H - q / mx * H).toFixed(1);
+  const pts = arr => arr.map((q, i) => X(i) + ',' + Y(q)).join(' ');
+  const area = pts(withV) + ' ' + vers.map((q, i) => [i, q]).reverse().map(([i, q]) => X(i) + ',' + Y(q)).join(' ');
+  const svg = h('div');
+  svg.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + (H + 20) + '" width="100%" role="img" aria-label="Intérêts composés" style="display:block;overflow:visible;margin:12px 0 4px">' +
+    '<polygon points="' + area + '" style="fill:var(--up);opacity:.22"/>' +
+    '<line x1="0" x2="' + W + '" y1="' + H + '" y2="' + H + '" style="stroke:var(--line)"/>' +
+    '<polyline fill="none" stroke-width="2" stroke-dasharray="4 4" style="stroke:var(--muted)" points="' + pts(noV) + '"/>' +
+    '<polyline fill="none" stroke-width="2.5" style="stroke:var(--accent)" points="' + pts(withV) + '"/>' +
+    '<text x="0" y="' + (H + 15) + '" font-size="10" style="fill:var(--muted)">Aujourd’hui</text>' +
+    '<text x="' + W + '" y="' + (H + 15) + '" text-anchor="end" font-size="10" style="fill:var(--muted)">Dans ' + I.n + ' ans</text></svg>';
+  const line = (k, x, c) => h('div', { class:'row' }, h('div', { class:'l' }, k), h('div', { class:'r n ' + (c || '') }, E0.format(x)));
+  return [
+    h('div', { style:'margin-top:16px' }, h('div', { class:'m' }, 'Dans ' + I.n + ' ans, les intérêts auront produit'),
+      h('div', { class:'total up', style:'font-size:30px' }, E0.format(Math.max(0, gains)))),
+    svg,
+    h('div', { class:'card list', style:'margin-top:12px' },
+      line('Capital final', w),
+      line('Total versé (départ + versements)', versé),
+      line('Intérêts gagnés', Math.max(0, gains), 'up'),
+      line('Sans versements (départ seul)', z)),
+    h('div', { class:'note' }, 'Pointillé : sans versements · trait plein : avec versements · zone verte : intérêts. Rendement constant, capitalisé chaque mois, sans frais ni impôt (voir l’onglet Net pour ceux-ci).')
+  ];
+}
+
 /* ---------- Routeur ---------- */
 function render(){
   if(!S.done && S.step == null && !S.envs.length){ S.step = 0; save(); }
@@ -817,13 +999,13 @@ function render(){
   let k = r[0];
   if(S.step != null && !k) k = 'o';
   if(k === 'o' && S.step == null) k = '';
-  const V = { o:vOnb, c:vClass, e:vEnv, l:vLine, n:vNetR, s:vStratR, g:vGoalsR }[k] || vHome;
+  const V = { o:vOnb, c:vClass, e:vEnv, l:vLine, n:vNetR, s:vStratR, g:vGoalsR, u:vTools }[k] || vHome;
   $('#app').replaceChildren(V(...r.slice(1)));
   navR(k);
 }
 function navR(k){
-  const cur = k === 'n' ? 1 : k === 's' ? 2 : k === 'g' ? 3 : 0;
-  $('#nav').replaceChildren(...[['Brut', 1, '#/'], ['Net', 1, '#/n'], ['Stratégie', 1, '#/s'], ['Objectifs', 1, '#/g'], ['Outils']].map(([n, on, hr], i) =>
+  const cur = k === 'n' ? 1 : k === 's' ? 2 : k === 'g' ? 3 : k === 'u' ? 4 : 0;
+  $('#nav').replaceChildren(...[['Brut', 1, '#/'], ['Net', 1, '#/n'], ['Stratégie', 1, '#/s'], ['Objectifs', 1, '#/g'], ['Outils', 1, '#/u']].map(([n, on, hr], i) =>
     h('button', { disabled:!on, 'aria-current':on && i === cur ? 'page' : null, title:on ? null : 'Bientôt', onclick:on ? () => go(hr) : null }, n)));
 }
 window.onhashchange = () => { render(); window.scrollTo(0, 0); };
