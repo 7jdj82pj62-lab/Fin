@@ -137,6 +137,7 @@ const P = new Intl.NumberFormat('fr-FR', { style:'percent', minimumFractionDigit
 const PP = new Intl.NumberFormat('fr-FR', { style:'percent', minimumFractionDigits:1, maximumFractionDigits:1 });
 const P0 = new Intl.NumberFormat('fr-FR', { style:'percent', maximumFractionDigits:0 });
 const N = new Intl.NumberFormat('fr-FR', { maximumFractionDigits:6 });
+const EK = (() => { try{ return new Intl.NumberFormat('fr-FR', { style:'currency', currency:'EUR', notation:'compact', maximumFractionDigits:1 }); }catch(e){ return E0; } })();
 const sg = v => (v >= 0 ? '+' : '') + E0.format(v);
 const cls = v => v >= 0 ? 'up' : 'down';
 const money = (v, c) => { try{ return new Intl.NumberFormat('fr-FR', { style:'currency', currency:c, maximumFractionDigits:4 }).format(v); }catch(e){ return N.format(v) + ' ' + c; } };
@@ -429,26 +430,67 @@ const taxe = e => { const a = agg(e.lines); return Math.max(0, a.v - a.c) * (e.t
 const todo = e => e.fee == null && e.fix == null && e.tax == null;
 const sums = es => es.reduce((o, e) => { o.p += fp(e); o.x += fx(e); o.f += fees(e); o.t += taxe(e); return o; }, { p:0, x:0, f:0, t:0 });
 
+function donut(it, top, sub){
+  const R = 54, C = 2 * Math.PI * R, tot = it.reduce((a, o) => a + o.v, 0);
+  let off = 0, seg = '';
+  if(tot > 0) it.filter(o => o.v > 0).forEach(o => {
+    const len = o.v / tot * C, dl = Math.max(0, len - 2);
+    seg += '<circle r="54" cx="70" cy="70" fill="none" stroke="var(--c' + o.i + ')" stroke-width="16" stroke-dasharray="' + dl.toFixed(2) + ' ' + (C - dl).toFixed(2) + '" stroke-dashoffset="' + (-off).toFixed(2) + '"/>';
+    off += len;
+  });
+  return '<svg viewBox="0 0 140 140" width="176" height="176" role="img" aria-label="Répartition par classe d’actifs" style="display:block;margin:8px auto"><g transform="rotate(-90 70 70)">' +
+    '<circle r="54" cx="70" cy="70" fill="none" stroke="var(--line)" stroke-width="16"/>' + seg + '</g>' +
+    '<text x="70" y="68" text-anchor="middle" font-size="16" font-weight="700" fill="var(--ink)">' + top + '</text>' +
+    '<text x="70" y="85" text-anchor="middle" font-size="9" fill="var(--muted)">' + sub + '</text></svg>';
+}
+const fmtK = v => v >= 10000 ? Math.round(v / 1000) + ' k€' : v >= 1000 ? (v / 1000).toFixed(1).replace('.', ',') + ' k€' : Math.round(v) + ' €';
+function donut(parts, top, sub){
+  const tot = parts.reduce((a, p) => a + p.v, 0);
+  if(!tot) return h('div', { class:'note' }, 'Rien à répartir pour l’instant : renseigne les frais et impôts de tes enveloppes.');
+  let off = 25, arcs = '';
+  parts.forEach(p => {
+    const pc = p.v / tot * 100;
+    arcs += '<circle cx="21" cy="21" r="15.9155" fill="none" stroke-width="6" style="stroke:var(--c' + p.i + ')" stroke-dasharray="' + pc.toFixed(3) + ' ' + (100 - pc).toFixed(3) + '" stroke-dashoffset="' + off.toFixed(3) + '"/>';
+    off -= pc;
+  });
+  const w = h('div', { style:'max-width:220px;margin:8px auto 4px' });
+  w.innerHTML = '<svg viewBox="0 0 42 42" width="100%" role="img" aria-label="Répartition par classe">' +
+    '<circle cx="21" cy="21" r="15.9155" fill="none" stroke-width="6" style="stroke:var(--line)"/>' + arcs +
+    '<text x="21" y="21.4" text-anchor="middle" font-size="4" style="fill:var(--ink);font-weight:700">' + top + '</text>' +
+    '<text x="21" y="26" text-anchor="middle" font-size="2.4" style="fill:var(--muted)">' + sub + '</text></svg>';
+  return w;
+}
 function vNet(){
   const a = agg(allLines()), s = sums(S.envs), net = a.v - s.t, pc = x => a.v ? PP.format(x / a.v) : '–', td = S.envs.filter(todo);
   const d = h('div', null, h('h1', null, 'Patrimoine net'), h('div', { class:'total' }, E0.format(net)));
   if(!S.envs.length){ d.append(h('div', { class:'note' }, 'Ajoute d’abord tes enveloppes dans l’onglet Brut.')); return d; }
   d.append(h('div', { class:'note' }, 'Ce qu’il te resterait après impôts sur les plus-values si tu vendais tout aujourd’hui.'));
-  const br = (k, sub, v, strong) => h('div', { class:'row' }, h('div', { class:'l' }, h('div', { class:strong ? 'n' : '' }, k), sub ? h('div', { class:'m' }, sub) : null), h('div', { class:'r n' }, v));
-  d.append(h('div', { class:'card list', style:'margin-top:14px' }, br('Patrimoine brut', '', E0.format(a.v)), br('Impôts latents', pc(s.t) + ' du brut', '− ' + E0.format(s.t)), br('Patrimoine net', '', E0.format(net), 1)),
+  const lg = (col, k, v, sub) => h('div', { style:'display:flex;align-items:center;gap:10px;margin-top:12px' },
+    h('span', { class:'dot', style:'background:' + col }), h('div', { style:'flex:1' }, k, sub ? h('div', { class:'m' }, sub) : null), h('div', { class:'n' }, v));
+  d.append(h('div', { class:'card', style:'margin-top:14px;padding:16px' },
+    h('div', { class:'seg', style:'height:22px;margin-top:0' },
+      h('i', { style:'flex:' + Math.max(net, 0) + ';background:var(--accent)' }),
+      s.t > 0 ? h('i', { style:'flex:' + s.t + ';background:var(--warn)' }) : null),
+    lg('var(--accent)', 'Patrimoine net', E0.format(net), pc(net) + ' du brut'),
+    lg('var(--warn)', 'Impôts latents', '− ' + E0.format(s.t), pc(s.t) + ' du brut'),
+    h('div', { style:'display:flex;justify-content:space-between;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);color:var(--muted);font-size:14px' },
+      h('span', null, 'Patrimoine brut'), h('span', null, E0.format(a.v)))),
     h('div', { class:'tiles' }, tile('Frais par an', E0.format(s.f), pc(s.f) + ' du patrimoine'), tile('Frais par mois', E0.format(s.f / 12), 'en moyenne')));
   if(td.length) d.append(h('div', { class:'card', style:'margin-top:14px;padding:14px' }, h('div', { class:'n' }, td.length + ' enveloppe(s) à compléter'),
     h('div', { class:'m', style:'margin:4px 0 12px' }, 'Tant que les frais et impôts ne sont pas saisis, le net est surestimé.'),
     h('button', { class:'btn', onclick:() => { S.nw = 1; save(); go('#/n/e/' + td[0].id); } }, 'Compléter maintenant')));
-  const cs = CLASSES.map((c, i) => ({ c, i, es:classEnvs(c) })).filter(o => o.es.length).map(o => ({ ...o, x:sums(o.es) })).sort((p, q) => q.x.f - p.x.f);
-  d.append(h('h2', null, 'Où partent les frais'));
-  const card = h('div', { class:'card list' });
-  cs.forEach(o => {
-    const share = s.f ? o.x.f / s.f : 0;
-    card.append(h('button', { class:'row', onclick:() => go('#/n/c/' + o.i) }, h('span', { class:'dot', style:'background:var(--c' + o.i + ')' }),
-      h('div', { class:'l' }, h('div', { class:'n' }, o.c), h('div', { class:'m' }, E0.format(o.x.t) + ' d’impôts latents'), h('div', { class:'bar' }, h('i', { style:'width:' + share * 100 + '%;background:var(--c' + o.i + ')' }))),
-      h('div', { class:'r' }, h('div', { class:'n' }, E0.format(o.x.f) + ' /an'), h('div', { class:'m' }, P0.format(share) + ' des frais'))));
-  });
+  const mode = S.nv === 't' ? 't' : 'f', mt = o => mode === 'f' ? o.x.f : o.x.t, tot = mode === 'f' ? s.f : s.t;
+  const cs = CLASSES.map((c, i) => ({ c, i, es:classEnvs(c) })).filter(o => o.es.length).map(o => ({ ...o, x:sums(o.es) })).sort((p, q) => mt(q) - mt(p));
+  d.append(h('h2', null, 'Répartition par classe'),
+    h('div', { class:'chips' },
+      h('button', { class:'chip', 'aria-pressed':String(mode === 'f'), onclick:() => { S.nv = 'f'; save(); render(); } }, 'Frais par an'),
+      h('button', { class:'chip', 'aria-pressed':String(mode === 't'), onclick:() => { S.nv = 't'; save(); render(); } }, 'Impôts latents')),
+    donut(cs.filter(o => mt(o) > 0).map(o => ({ v:mt(o), i:o.i })), fmtK(tot), mode === 'f' ? 'frais / an' : 'impôts latents'));
+  const card = h('div', { class:'card list', style:'margin-top:8px' });
+  cs.forEach(o => card.append(h('button', { class:'row', onclick:() => go('#/n/c/' + o.i) },
+    h('span', { class:'dot', style:'background:var(--c' + o.i + ')' }),
+    h('div', { class:'l' }, h('div', { class:'n' }, o.c), h('div', { class:'m' }, mode === 'f' ? E0.format(o.x.t) + ' d’impôts latents' : E0.format(o.x.f) + ' de frais par an')),
+    h('div', { class:'r' }, h('div', { class:'n' }, E0.format(mt(o)) + (mode === 'f' ? ' /an' : '')), h('div', { class:'m' }, tot ? P0.format(mt(o) / tot) : '0 %')))));
   d.append(card, projCard(a.v, s));
   return d;
 }
@@ -504,18 +546,29 @@ function projOut(v, s, st){
   if(!v) return [h('div', { class:'note' }, 'Ajoute du patrimoine pour lancer la simulation.')];
   const r = st.r / 100, rate = s.p / v, A = [v], B = [v];
   let a = v, b = v, paid = 0;
-  for(let y = 1; y <= st.n; y++){
-    a *= 1 + r; const f = b * rate + s.x; b = Math.max(0, b * (1 + r) - f); paid += f; A.push(a); B.push(b);
-  }
-  const cost = a - b, W = 320, H = 120, mx = Math.max(...A) || 1, pts = z => z.map((q, i) => (i / (z.length - 1) * W).toFixed(1) + ',' + (H - q / mx * H).toFixed(1)).join(' ');
+  for(let y = 1; y <= st.n; y++){ a *= 1 + r; const f = b * rate + s.x; b = Math.max(0, b * (1 + r) - f); paid += f; A.push(a); B.push(b); }
+  const cost = a - b;
   if(cost < 1) return [h('div', { class:'note' }, 'Aucun frais renseigné pour l’instant : complète les enveloppes ci-dessus pour voir leur effet sur la durée.')];
-  const svg = h('div'); svg.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="Capital avec et sans frais" style="display:block;overflow:visible;margin:14px 0 6px">' +
-    '<polyline fill="none" stroke="var(--muted)" stroke-width="2" stroke-dasharray="4 4" points="' + pts(A) + '"/>' +
-    '<polyline fill="none" stroke="var(--accent)" stroke-width="2.5" points="' + pts(B) + '"/></svg>';
+  const W = 320, H = 130, mx = Math.max(...A) || 1;
+  const X = i => (i / (A.length - 1) * W).toFixed(1), Y = q => (H - q / mx * H).toFixed(1);
+  const pa = A.map((q, i) => X(i) + ',' + Y(q)).join(' ');
+  const pb = B.map((q, i) => X(i) + ',' + Y(q)).join(' ');
+  const area = pa + ' ' + B.map((q, i) => [i, q]).reverse().map(([i, q]) => X(i) + ',' + Y(q)).join(' ');
+  const svg = h('div');
+  svg.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + (H + 20) + '" width="100%" role="img" aria-label="Capital avec et sans frais" style="display:block;overflow:visible;margin:12px 0 4px">' +
+    '<polygon points="' + area + '" style="fill:var(--warn);opacity:.25"/>' +
+    '<line x1="0" x2="' + W + '" y1="' + H + '" y2="' + H + '" style="stroke:var(--line)"/>' +
+    '<polyline fill="none" stroke-width="2" stroke-dasharray="4 4" style="stroke:var(--muted)" points="' + pa + '"/>' +
+    '<polyline fill="none" stroke-width="2.5" style="stroke:var(--accent)" points="' + pb + '"/>' +
+    '<text x="0" y="' + (H + 15) + '" font-size="10" style="fill:var(--muted)">Aujourd’hui</text>' +
+    '<text x="' + W + '" y="' + (H + 15) + '" text-anchor="end" font-size="10" style="fill:var(--muted)">Dans ' + st.n + ' ans</text></svg>';
   const line = (k, x, c) => h('div', { class:'row' }, h('div', { class:'l' }, k), h('div', { class:'r n ' + (c || '') }, E0.format(x)));
-  return [h('div', { style:'margin-top:16px' }, h('div', { class:'m' }, 'Sur ' + st.n + ' ans, tes frais te coûteraient'), h('div', { class:'total down', style:'font-size:30px' }, E0.format(cost))),
-    h('div', { class:'card list', style:'margin-top:12px' }, line('Capital sans frais (pointillé)', a), line('Capital avec frais (trait plein)', b), line('Frais payés', paid), line('Croissance perdue', Math.max(0, cost - paid))),
-    svg, h('div', { class:'note' }, 'Simulation sur ton patrimoine actuel, sans nouveaux versements, avec un rendement supposé constant.')];
+  return [
+    h('div', { style:'margin-top:16px' }, h('div', { class:'m' }, 'Sur ' + st.n + ' ans, tes frais te coûteraient'), h('div', { class:'total down', style:'font-size:30px' }, E0.format(cost))),
+    h('div', { class:'card list', style:'margin-top:12px' }, line('Capital sans frais', a), line('Capital avec frais', b), line('Frais payés', paid), line('Croissance perdue', Math.max(0, cost - paid), 'down')),
+    svg,
+    h('div', { class:'note' }, 'Pointillé : sans frais · trait plein : avec frais · zone orangée : ce que les frais coûtent. Simulation sur ton patrimoine actuel, sans nouveaux versements, rendement supposé constant.')
+  ];
 }
 
 /* ---------- Stratégie annuelle ---------- */
@@ -781,4 +834,3 @@ document.addEventListener('visibilitychange', () => { if(!document.hidden && (!M
 </script>
 </body>
 </html>
-
