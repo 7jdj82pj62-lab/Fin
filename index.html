@@ -138,6 +138,7 @@ const CLASSES = ['Bourse', 'Crypto', 'Épargne', 'Immobilier', 'Autres'];
 let S = ls.get('pf.v1', null) || { envs:[], done:false, step:null, url: ls.get('pf0.url', '') };
 if(!S || typeof S !== 'object') S = { envs:[], done:false, step:null, url:'' };
 if(!Array.isArray(S.envs)) S.envs = [];
+if(S.infl && (typeof S.infl.rate !== 'number' || !isFinite(S.infl.rate))) delete S.infl;
 let M = ls.get('pf.q', { q:{}, fx:{ EUR:1 }, t:null });
 let failed = false, yes = false;
 const save = () => ls.set('pf.v1', S);
@@ -181,14 +182,15 @@ async function api(p){
   return j;
 }
 const norm = q => q.currency === 'GBp' ? { ...q, price:q.price / 100, prev:q.prev / 100, currency:'GBP' } : q;
-const infl = () => S.inflOv != null ? S.inflOv : (S.infl ? S.infl.rate : 0);
+const inflOk = () => S.infl && typeof S.infl.rate === 'number' && isFinite(S.infl.rate);
+const infl = () => typeof S.inflOv === 'number' ? S.inflOv : (inflOk() ? S.infl.rate : 0);
 let inflBusy = false;
 async function fetchInfl(){
   if(!S.url || inflBusy) return;
   if(S.infl && Date.now() - S.infl.t < 7 * 864e5) return;
   if(S.inflTry && Date.now() - S.inflTry < 3600e3) return;
   inflBusy = true; S.inflTry = Date.now();
-  try{ const j = await api({ action:'inflation' }); S.infl = { rate:j.rate, period:j.period, t:Date.now() }; save(); }
+  try{ const j = await api({ action:'inflation' }); if(typeof j.rate !== 'number' || !isFinite(j.rate)) throw new Error('réponse inattendue'); S.infl = { rate:j.rate, period:String(j.period || ''), t:Date.now() }; save(); }
   catch(e){} finally { inflBusy = false; }
 }
 function inflCard(){
@@ -196,13 +198,13 @@ function inflCard(){
   if(S.inflOv != null) io.value = S.inflOv;
   return h('div', { class:'card form', style:'margin-top:12px' },
     h('div', { class:'full' }, h('div', { class:'n' }, 'Inflation France'),
-      h('div', { class:'m' }, S.infl ? 'Dernier glissement annuel publié : ' + fr1(S.infl.rate) + ' % (' + S.infl.period + ')' : 'Non récupérée pour l’instant (relais à jour requis).')),
+      h('div', { class:'m' }, inflOk() ? 'Dernier glissement annuel publié : ' + fr1(S.infl.rate) + ' % (' + S.infl.period + ')' : 'Non récupérée pour l’instant (relais à jour requis).')),
     fld('Inflation manuelle (%)', io, 1),
     h('button', { class:'btn full', onclick:() => { const v = parseFloat(io.value); if(isNaN(v)) delete S.inflOv; else S.inflOv = v; save(); render(); } }, 'Enregistrer l’inflation'));
 }
 function superCard(brut, s){
   const i = infl(), net = brut - s.t, sup = net / (1 + i / 100), perte = net - sup;
-  const src = S.inflOv != null ? 'saisie manuelle' : S.infl ? 'publiée, ' + S.infl.period : 'non disponible';
+  const src = typeof S.inflOv === 'number' ? 'saisie manuelle' : inflOk() ? 'publiée, ' + S.infl.period : 'non disponible';
   const rows = S.envs.map(e => ({ e, n:agg(e.lines).v - taxe(e) })).filter(o => o.n > 0).sort((p, q) => q.n - p.n);
   return h('div', null, h('h2', null, 'Super net (après inflation)'),
     h('div', { class:'card', style:'padding:16px' },
@@ -899,7 +901,7 @@ function bud(){
 const spend = () => bud().cats.reduce((a, c) => a + (c.amt || 0), 0);
 const provMonthly = () => { const T = (S.st || {})[nowY()]; return T ? T.p.reduce((a, p) => a + p.amt, 0) : 0; };
 const perfNow = () => { const a = agg(allLines()); return a.c ? (a.v + a.dv - a.c) / a.c * 100 : null; };
-const fr1 = v => v.toFixed(1).replace('.', ',');
+const fr1 = v => (typeof v === 'number' && isFinite(v) ? v.toFixed(1).replace('.', ',') : '–');
 const gotoB = (B, to) => { B.step = to; save(); render(); };
 
 function budNav(B, st, last, keep){
