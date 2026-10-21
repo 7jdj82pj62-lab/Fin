@@ -8,8 +8,10 @@
 <title>Patrimoine</title>
 <script>
 window.addEventListener('error', function(e){
+  /* N'affiche un message que si l'écran est vide : une erreur venant d'ailleurs (extension, navigateur) ne doit pas effacer l'appli */
   var a = document.getElementById('app');
-  if(a) a.textContent = 'Erreur de l’appli : ' + (e.message || 'inconnue') + ' (ligne ' + (e.lineno || '?') + '). Ne supprime pas les données du navigateur : envoie ce message pour qu’on corrige.';
+  if(!a || (a.children.length && a.textContent.trim() !== 'Chargement…')) return;
+  a.textContent = 'Erreur de l’appli : ' + (e.message || 'inconnue') + (e.lineno ? ' (ligne ' + e.lineno + ')' : '') + '. Envoie ce message pour qu’on corrige, sans supprimer les données du navigateur.';
 });
 </script>
 <style>
