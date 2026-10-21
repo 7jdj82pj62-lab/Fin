@@ -109,6 +109,10 @@ nav a[aria-current]{color:var(--accent);font-weight:600}
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
+/* append / replaceChildren ignorent null et false (sinon le navigateur écrit « null » à l'écran) */
+const _append = Element.prototype.append, _replace = Element.prototype.replaceChildren;
+Element.prototype.append = function(...n){ return _append.apply(this, n.filter(x => x != null && x !== false)); };
+Element.prototype.replaceChildren = function(...n){ return _replace.apply(this, n.filter(x => x != null && x !== false)); };
 /* nombre saisi au format français (virgule ou point) ; NaN si vide ou invalide */
 const pf = v => { const t = String(v == null ? '' : v).replace(/\s/g, '').replace(',', '.'); return t === '' ? NaN : parseFloat(t); };
 const h = (t, a, ...c) => {
@@ -857,9 +861,10 @@ function planned(g, gd){
   return t;
 }
 /* répartition des enveloppes entre objectifs : par échéance croissante, sans double comptage */
-function goalCalc(){
+function goalCalc(mode){
+  mode = mode || S.gm;
   const rem = {}, out = {};
-  S.envs.forEach(e => { const a = agg(e.lines); rem[e.id] = Math.max(0, a.v - (S.gm === 'brut' ? 0 : taxe(e))); });
+  S.envs.forEach(e => { const a = agg(e.lines); rem[e.id] = Math.max(0, a.v - (mode === 'brut' ? 0 : taxe(e))); });
   gl().slice().sort((a, b) => a.date.localeCompare(b.date)).forEach(g => {
     let need = g.target; const parts = [];
     g.envs.forEach(id => { if(rem[id] == null) return; const take = Math.min(rem[id], need); rem[id] -= take; need -= take; parts.push({ id, amt:take }); });
@@ -868,20 +873,35 @@ function goalCalc(){
   return out;
 }
 function vGoals(){
-  const gs = gl().slice().sort((a, b) => a.date.localeCompare(b.date)), C = goalCalc();
-  const tot = gs.reduce((a, g) => a + g.target, 0), fu = gs.reduce((a, g) => a + C[g.id].funded, 0), ok = gs.filter(g => isDone(g, C[g.id])).length;
   const mode = S.gm === 'brut' ? 'brut' : 'net';
-  const chips = h('div', { class:'chips', style:'margin-top:14px' },
-    h('button', { class:'chip', 'aria-pressed':String(mode === 'net'), onclick:() => { S.gm = 'net'; save(); render(); } }, 'Après impôts (net)'),
-    h('button', { class:'chip', 'aria-pressed':String(mode === 'brut'), onclick:() => { S.gm = 'brut'; save(); render(); } }, 'Avant impôts (brut)'));
-  const d = h('div', null, h('h1', null, 'Objectifs'), h('div', { class:'total' }, gs.length ? ok + ' sur ' + gs.length + ' atteint' + (ok > 1 ? 's' : '') : 'Aucun objectif'));
-  if(gs.length) d.append(h('div', { class:'tiles' }, tile('Déjà financé', E0.format(fu), 'sur ' + E0.format(tot)), tile('Reste à financer', E0.format(tot - fu), gs.length - ok + ' objectif(s) en cours')), chips, S.envs.some(e => typeof e.tax === 'number') ? null : h('div', { class:'note' }, 'Aucun impôt renseigné dans l’onglet Net : le montant après impôts est égal au montant brut.'));
+  const gs = gl().slice().sort((p, q) => p.date.localeCompare(q.date));
+  const C = goalCalc(mode), Cb = goalCalc('brut'), Cn = goalCalc('net');
+  const tot = gs.reduce((acc, g) => acc + g.target, 0), fu = gs.reduce((acc, g) => acc + C[g.id].funded, 0);
+  const fb = gs.reduce((acc, g) => acc + Cb[g.id].funded, 0), fn = gs.reduce((acc, g) => acc + Cn[g.id].funded, 0);
+  const ok = gs.filter(g => isDone(g, C[g.id])).length;
+  const taxSet = S.envs.some(e => typeof e.tax === 'number');
+  const d = h('div', null, h('h1', null, 'Objectifs'),
+    h('div', { class:'total' }, gs.length ? ok + ' sur ' + gs.length + ' atteint' + (ok > 1 ? 's' : '') : 'Aucun objectif'));
+  if(gs.length){
+    d.append(h('div', { class:'tiles' },
+      tile('Déjà financé', E0.format(mode === 'brut' ? fb : fn), mode === 'brut' ? 'avant impôts' : 'après impôts latents'),
+      tile('Reste à financer', E0.format(tot - (mode === 'brut' ? fb : fn)), (gs.length - ok) + ' objectif(s) en cours')));
+    d.append(h('div', { class:'chips', style:'margin-top:14px' },
+      h('button', { class:'chip', 'aria-pressed':String(mode === 'net'), onclick:() => { S.gm = 'net'; save(); render(); } }, 'Après impôts (net)'),
+      h('button', { class:'chip', 'aria-pressed':String(mode === 'brut'), onclick:() => { S.gm = 'brut'; save(); render(); } }, 'Avant impôts (brut)')));
+    d.append(h('div', { class:'card', style:'padding:14px;margin-top:12px' },
+      h('div', { class:'m' }, 'Déjà financé, avant impôts : ' + E0.format(fb)),
+      h('div', { class:'m' }, 'Déjà financé, après impôts latents : ' + E0.format(fn)),
+      taxSet ? null : h('div', { class:'note err' }, 'Aucun impôt renseigné : brut et net sont identiques. Renseigne l’impôt de tes enveloppes pour voir la différence.'),
+      taxSet ? null : h('button', { class:'link', onclick:() => go('#/n') }, 'Renseigner les impôts dans l’onglet Net →')));
+  }
   d.append(h('button', { class:'btn', style:'width:100%;margin-top:14px', onclick:() => go('#/g/new') }, '+ Nouvel objectif'), h('h2', null, 'Mes objectifs'));
   const card = h('div', { class:'card list' });
   gs.forEach(g => {
     const x = C[g.id], pct = Math.min(1, x.funded / g.target), done = isDone(g, x), gd = new Date(g.date), late = !done && gd < new Date();
     card.append(h('button', { class:'row', onclick:() => go('#/g/' + g.id) },
-      h('div', { class:'l' }, h('div', { class:'n' }, g.name), h('div', { class:'m' + (done ? ' up' : late ? ' down' : '') }, done ? 'Objectif atteint ✓' : late ? 'Échéance dépassée' : fmtD(gd) + ' · ' + mLeft(gd) + ' mois'),
+      h('div', { class:'l' }, h('div', { class:'n' }, g.name),
+        h('div', { class:'m' + (done ? ' up' : late ? ' down' : '') }, done ? 'Objectif atteint ✓' : late ? 'Échéance dépassée' : fmtD(gd) + ' · ' + mLeft(gd) + ' mois'),
         h('div', { class:'bar' }, h('i', { style:'width:' + pct * 100 + '%;background:' + (done ? 'var(--up)' : 'var(--accent)') }))),
       h('div', { class:'r' }, h('div', { class:'n' }, E0.format(x.funded)), h('div', { class:'m' }, P0.format(pct) + ' de ' + E0.format(g.target)))));
   });
