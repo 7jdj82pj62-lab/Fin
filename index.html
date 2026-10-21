@@ -149,7 +149,7 @@ function val(l){
   if(!q || q.error || q.price == null) return null;
   const r = q.currency === 'EUR' ? 1 : M.fx[q.currency];
   if(!r) return null;
-  return { v:q.price * l.qty * r, c:l.cost * l.qty * r, d:(q.price - q.prev) * l.qty * r };
+  return { v:q.price * l.qty * r, c:l.cost * l.qty, d:(q.price - q.prev) * l.qty * r };
 }
 const divs = l => (l.divs || []).reduce((a, d) => a + d.amt, 0);
 function agg(lines){
@@ -169,7 +169,40 @@ async function api(p){
   return j;
 }
 const norm = q => q.currency === 'GBp' ? { ...q, price:q.price / 100, prev:q.prev / 100, currency:'GBP' } : q;
+const infl = () => S.inflOv != null ? S.inflOv : (S.infl ? S.infl.rate : 0);
+let inflBusy = false;
+async function fetchInfl(){
+  if(!S.url || inflBusy) return;
+  if(S.infl && Date.now() - S.infl.t < 7 * 864e5) return;
+  if(S.inflTry && Date.now() - S.inflTry < 3600e3) return;
+  inflBusy = true; S.inflTry = Date.now();
+  try{ const j = await api({ action:'inflation' }); S.infl = { rate:j.rate, period:j.period, t:Date.now() }; save(); }
+  catch(e){} finally { inflBusy = false; }
+}
+function inflCard(){
+  const io = h('input', { type:'number', inputmode:'decimal', step:'any', placeholder:'ex. 1,5' });
+  if(S.inflOv != null) io.value = S.inflOv;
+  return h('div', { class:'card form', style:'margin-top:12px' },
+    h('div', { class:'full' }, h('div', { class:'n' }, 'Inflation France'),
+      h('div', { class:'m' }, S.infl ? 'Dernier glissement annuel publié : ' + fr1(S.infl.rate) + ' % (' + S.infl.period + ')' : 'Non récupérée pour l’instant (relais à jour requis).')),
+    fld('Inflation manuelle (%)', io, 1),
+    h('button', { class:'btn full', onclick:() => { const v = parseFloat(io.value); if(isNaN(v)) delete S.inflOv; else S.inflOv = v; save(); render(); } }, 'Enregistrer l’inflation'));
+}
+function superCard(brut, s){
+  const i = infl(), net = brut - s.t, sup = net / (1 + i / 100), perte = net - sup;
+  const src = S.inflOv != null ? 'saisie manuelle' : S.infl ? 'publiée, ' + S.infl.period : 'non disponible';
+  const rows = S.envs.map(e => ({ e, n:agg(e.lines).v - taxe(e) })).filter(o => o.n > 0).sort((p, q) => q.n - p.n);
+  return h('div', null, h('h2', null, 'Super net (après inflation)'),
+    h('div', { class:'card', style:'padding:16px' },
+      h('div', { class:'m' }, 'Inflation ' + fr1(i) + ' % (' + src + ')'),
+      h('div', { class:'total up', style:'font-size:30px' }, E0.format(sup)),
+      h('div', { class:'note' }, 'Ton patrimoine net, exprimé en pouvoir d’achat d’aujourd’hui. L’inflation en fait perdre ' + E0.format(perte) + '.')),
+    h('div', { class:'card list', style:'margin-top:10px' }, ...rows.map(o => h('div', { class:'row' },
+      h('div', { class:'l' }, h('div', { class:'n' }, o.e.name), h('div', { class:'m' }, E0.format(o.n) + ' net nominal')),
+      h('div', { class:'r n' }, E0.format(o.n / (1 + i / 100)))))));
+}
 async function refresh(){
+  fetchInfl();
   const syms = [...new Set(allLines().filter(l => l.m).map(l => l.sym))];
   if(!S.url || !syms.length) return;
   failed = false;
@@ -285,10 +318,10 @@ function vLine(eid, lid){
   const x = val(l) || { v:0, c:0, d:0 }, dv = divs(l), t = TYPES[e.type];
   const d = h('div', null, back('#/e/' + eid, e.name), head(l.name, { v:x.v, c:x.c, dv }));
   if(l.m){
-    const q = M.q[l.sym];
-    if(q && q.price != null) d.append(h('div', { class:'note' }, 'Dernier cours : ' + money(q.price, q.currency) + ' · ' + P.format((q.price - q.prev) / q.prev) + ' sur la séance'));
+    const q = M.q[l.sym], rt = q ? (q.currency === 'EUR' ? 1 : M.fx[q.currency]) : null;
+    if(q && q.price != null && rt) d.append(h('div', { class:'note' }, 'Dernier cours : ' + E2.format(q.price * rt) + ' (cours d’origine ' + money(q.price, q.currency) + ') · ' + P.format((q.price - q.prev) / q.prev) + ' sur la séance'));
   }
-  const ed = l.m ? [['Nombre de parts', 'qty'], ['Prix d’achat moyen', 'cost']] : [['Montant actuel (€)', 'val']].concat(t.nc ? [] : [['Prix d’achat (€)', 'cst']]);
+  const ed = l.m ? [['Nombre de parts', 'qty'], ['Prix d’achat moyen (€ par part)', 'cost']] : [['Montant actuel (€)', 'val']].concat(t.nc ? [] : [['Prix d’achat (€)', 'cst']]);
   const ins = ed.map(([lab, k]) => { const i = numIn(); i.value = l[k]; return [lab, k, i]; });
   const pvI = (!l.m && !t.nc) ? h('input', { type:'number', inputmode:'decimal', step:'any' }) : null;
   if(pvI) pvI.value = +((l.val || 0) - (l.cst || 0)).toFixed(2);
@@ -362,7 +395,7 @@ function searchBox(e, onPick){
   const inp = h('input', { type:'search', placeholder:'Nom, symbole ou ISIN…', autocomplete:'off', autocapitalize:'off' });
   const msg = t => box.replaceChildren(h('div', { class:'empty' }, t));
   const pick0 = r => {
-    const qty = numIn(), cost = numIn(), lab = h('label', null, 'Prix d’achat moyen');
+    const qty = numIn(), cost = numIn(), lab = h('label', null, 'Prix d’achat moyen (€ par part)');
     const add = () => {
       const n = parseFloat(qty.value), c = parseFloat(cost.value);
       if(!(n > 0) || !(c >= 0)){ qty.focus(); return; }
@@ -372,12 +405,16 @@ function searchBox(e, onPick){
       h('div', { class:'full' }, h('div', { class:'n' }, r.name), h('div', { class:'m' }, r.symbol + ' · ' + r.exchange)),
       fld('Nombre de parts', qty), h('div', null, lab, cost),
       h('button', { class:'btn', onclick:add }, 'Ajouter'), h('button', { class:'btn alt', onclick:() => box.replaceChildren() }, 'Annuler')));
-    api({ symbols:r.symbol }).then(a => { const q = a.quotes[r.symbol]; if(q && q.currency) lab.textContent = 'Prix d’achat moyen (' + (q.currency === 'GBp' ? 'GBP' : q.currency) + ')'; }).catch(() => {});
     qty.focus();
   };
   const pick = r => onPick ? onPick(r, box) : pick0(r);
   const show = rs => {
-    if(!rs.length) return msg('Aucun résultat. Essaie le symbole ou un autre mot du nom.');
+    if(!rs.length){
+      const tk = inp.value.trim().toUpperCase();
+      if(/^[A-Z0-9.\-]{1,12}$/.test(tk)) return box.replaceChildren(h('div', { class:'empty' }, 'Aucun résultat. Si tu connais le symbole exact (ex. HSBA.L, TSM) :'),
+        h('button', { class:'row', onclick:() => pick({ symbol:tk, name:tk, exchange:'symbole direct' }) }, h('div', { class:'l' }, h('div', { class:'n' }, 'Utiliser le symbole « ' + tk + ' »'))));
+      return msg('Aucun résultat. Essaie le symbole ou un autre mot du nom.');
+    }
     box.replaceChildren(...rs.map(r => h('button', { class:'row', onclick:() => pick(r) },
       h('div', { class:'l' }, h('div', { class:'n' }, r.name), h('div', { class:'m' }, r.symbol + ' · ' + r.exchange)), h('div', { class:'badge' }, r.type))));
   };
@@ -416,7 +453,7 @@ function settings(){
     f.text().then(t => { const o = JSON.parse(t); if(!o || !Array.isArray(o.envs)) throw 0; S = o; save(); go('#/'); render(); refresh(); })
       .catch(() => alert('Fichier non reconnu.'));
   };
-  return h('details', { open:!S.url }, h('summary', null, 'Réglages et sauvegarde'), u,
+  return h('details', { open:!S.url }, h('summary', null, 'Réglages et sauvegarde'), u, inflCard(),
     h('div', { class:'btns' },
       h('button', { class:'btn', onclick:() => { S.url = u.value.trim(); save(); refresh(); render(); } }, 'Enregistrer l’adresse'),
       h('button', { class:'btn alt', onclick:exportData }, 'Exporter mes données'),
@@ -425,9 +462,12 @@ function settings(){
 }
 
 /* ---------- Patrimoine net : frais et impôts ---------- */
-const fp = e => agg(e.lines).v * (e.fee || 0) / 100, fx = e => e.fix || 0, fees = e => fp(e) + fx(e);
+const manV = e => e.lines.filter(l => !l.m).reduce((a, l) => a + ((val(l) || { v:0 }).v), 0);
+const fp = e => e.lines.reduce((a, l) => { const x = val(l); return a + (l.m && x ? x.v * (l.fee || 0) / 100 : 0); }, 0) + manV(e) * (e.fee || 0) / 100;
+const fx = e => e.lines.reduce((a, l) => a + (l.m ? (l.fix || 0) : 0), 0) + (e.fix || 0);
+const fees = e => fp(e) + fx(e);
 const taxe = e => { const a = agg(e.lines); return Math.max(0, a.v - a.c) * (e.tax || 0) / 100; };
-const todo = e => e.fee == null && e.fix == null && e.tax == null;
+const todo = e => e.tax == null || e.lines.some(l => l.m && l.fee == null) || (e.lines.some(l => !l.m) && e.fee == null);
 const sums = es => es.reduce((o, e) => { o.p += fp(e); o.x += fx(e); o.f += fees(e); o.t += taxe(e); return o; }, { p:0, x:0, f:0, t:0 });
 
 function donut(it, top, sub){
@@ -479,6 +519,7 @@ function vNet(){
   if(td.length) d.append(h('div', { class:'card', style:'margin-top:14px;padding:14px' }, h('div', { class:'n' }, td.length + ' enveloppe(s) à compléter'),
     h('div', { class:'m', style:'margin:4px 0 12px' }, 'Tant que les frais et impôts ne sont pas saisis, le net est surestimé.'),
     h('button', { class:'btn', onclick:() => { S.nw = 1; save(); go('#/n/e/' + td[0].id); } }, 'Compléter maintenant')));
+  d.append(superCard(a.v, s));
   const mode = S.nv === 't' ? 't' : 'f', mt = o => mode === 'f' ? o.x.f : o.x.t, tot = mode === 'f' ? s.f : s.t;
   const cs = CLASSES.map((c, i) => ({ c, i, es:classEnvs(c) })).filter(o => o.es.length).map(o => ({ ...o, x:sums(o.es) })).sort((p, q) => mt(q) - mt(p));
   d.append(h('h2', null, 'Répartition par classe'),
@@ -507,25 +548,49 @@ function vNetClass(i){
   return h('div', null, back('#/n', 'Patrimoine net'), h('h1', null, c), h('div', { class:'total' }, E0.format(x.f) + ' /an'),
     h('div', { class:'sub' }, h('span', null, E0.format(x.t) + ' d’impôts latents')), h('h2', null, 'Enveloppes'), card);
 }
+function ratesCard(e){
+  e.rates = e.rates || {};
+  const ys = Object.keys(e.rates).sort((a, b) => b - a), list = h('div', { class:'card list' });
+  ys.forEach(y => list.append(h('div', { class:'row' }, h('div', { class:'l' }, h('div', { class:'n' }, y)), h('div', { class:'r n' }, fr1(e.rates[y]) + ' %'),
+    h('button', { class:'link del', onclick:() => { delete e.rates[y]; save(); render(); } }, 'Retirer'))));
+  if(!ys.length) list.append(h('div', { class:'empty' }, 'Aucun taux saisi. Ajoute le taux net annoncé chaque année par ton assureur.'));
+  const yI = h('input', { type:'number', inputmode:'numeric', placeholder:String(nowY()) }), rI = h('input', { type:'number', inputmode:'decimal', step:'any', placeholder:'ex. 2,8' });
+  return h('div', null, h('h2', null, 'Rendement net annoncé par année'), list,
+    h('div', { class:'card form', style:'margin-top:10px' }, fld('Année', yI), fld('Taux net (%)', rI),
+      h('button', { class:'btn full', onclick:() => { const y = parseInt(yI.value), r = parseFloat(rI.value); if(!(y > 1990) || isNaN(r)) return; e.rates[y] = r; save(); render(); } }, 'Ajouter ce taux')));
+}
 function vNetEnv(id){
   const e = S.envs.find(x => x.id === id); if(!e) return vNet();
   const g = agg(e.lines), c = TYPES[e.type].c, up = '#/n/c/' + CLASSES.indexOf(c), pvv = Math.max(0, g.v - g.c);
-  const mk = (k, ph) => { const i = h('input', { type:'number', inputmode:'decimal', step:'any', min:'0', placeholder:ph }); if(e[k] != null) i.value = e[k]; return i; };
-  const fee = mk('fee', '0'), fix = mk('fix', '0'), tax = mk('tax', '0'), prev = h('div', { class:'note' });
-  const upd = () => { prev.textContent = 'Estimation : ' + E0.format(g.v * (parseFloat(fee.value) || 0) / 100 + (parseFloat(fix.value) || 0)) + ' de frais par an · ' + E0.format(pvv * (parseFloat(tax.value) || 0) / 100) + ' d’impôts latents sur ' + E0.format(pvv) + ' de plus-value'; };
-  fee.oninput = fix.oninput = tax.oninput = upd; upd();
+  const hasM = e.lines.some(l => l.m), showEnv = e.lines.some(l => !l.m) || !hasM;
+  const num = (v, ph) => { const i = h('input', { type:'number', inputmode:'decimal', step:'any', min:'0', placeholder:ph }); if(v != null) i.value = v; return i; };
+  const lineIn = e.lines.filter(l => l.m).map(l => ({ l, f:num(l.fee, '0'), k:num(l.fix, '0'), v:(val(l) || { v:0 }).v }));
+  const envFee = num(e.fee, '0'), envFix = num(e.fix, '0'), tax = num(e.tax, '0');
+  const rd = x => x.value === '' ? undefined : parseFloat(x.value);
   const next = () => { const n = S.envs.find(x => todo(x) && x.id !== e.id); if(S.nw && n) go('#/n/e/' + n.id); else { S.nw = 0; save(); go(up); } };
-  const rest = S.envs.filter(todo).length;
-  const set = (f, x, t) => { [['fee', f], ['fix', x], ['tax', t]].forEach(([k, v]) => { if(v === '') delete e[k]; else if(v >= 0) e[k] = v; }); save(); next(); };
-  return h('div', null, back(up, c), h('h1', null, e.name), h('div', { class:'total' }, E0.format(g.v)),
-    S.nw && rest ? h('div', { class:'note' }, 'Il reste ' + rest + ' enveloppe(s) à compléter.') : null,
-    h('h2', null, 'Frais et impôts'),
-    h('div', { class:'card form' }, fld('Frais de gestion annuels (% de l’encours)', fee), fld('Frais fixes annuels (€)', fix), fld('Impôt sur la plus-value (%)', tax, 1),
-      h('div', { class:'full' }, prev),
-      h('button', { class:'btn full', onclick:() => { const n = x => x.value === '' ? '' : parseFloat(x.value); set(n(fee), n(fix), n(tax)); } }, S.nw ? 'Enregistrer et continuer' : 'Enregistrer'),
-      h('button', { class:'btn alt full', onclick:() => set(0, 0, 0) }, 'Aucun frais ni impôt'),
-      S.nw ? h('button', { class:'link full', onclick:() => { S.nw = 0; save(); go(up); } }, 'Plus tard') : null),
-    h('div', { class:'note' }, 'Les taux dépendent de l’enveloppe et de ta situation (ancienneté, tranche, régime). Renseigne ceux de ton contrat.'));
+  const saveAll = () => {
+    lineIn.forEach(o => { const f = rd(o.f), k = rd(o.k); if(f === undefined) delete o.l.fee; else o.l.fee = f; if(k === undefined) delete o.l.fix; else o.l.fix = k; });
+    if(showEnv){ const f = rd(envFee), k = rd(envFix); if(f === undefined) delete e.fee; else e.fee = f; if(k === undefined) delete e.fix; else e.fix = k; }
+    const t = rd(tax); if(t === undefined) delete e.tax; else e.tax = t;
+    save(); next();
+  };
+  const kids = [];
+  if(hasM){
+    kids.push(h('div', { class:'full m' }, 'Frais par ligne cotée (annuels, sur la valeur de chaque ligne)'));
+    lineIn.forEach(o => kids.push(h('div', { class:'full' }, h('div', { class:'n' }, o.l.name), h('div', { class:'m' }, E0.format(o.v))), fld('Frais de gestion (% / an)', o.f), fld('Frais fixes (€ / an)', o.k)));
+  }
+  if(showEnv) kids.push(h('div', { class:'full m' }, hasM ? 'Frais des lignes non cotées' : 'Frais de l’enveloppe'), fld('Frais de gestion annuels (% de l’encours)', envFee), fld('Frais fixes annuels (€)', envFix));
+  kids.push(fld('Impôt sur la plus-value (%)', tax, 1));
+  kids.push(h('button', { class:'btn full', onclick:saveAll }, S.nw ? 'Enregistrer et continuer' : 'Enregistrer'));
+  kids.push(h('button', { class:'btn alt full', onclick:() => { lineIn.forEach(o => { o.f.value = 0; o.k.value = 0; }); envFee.value = 0; envFix.value = 0; tax.value = 0; saveAll(); } }, 'Aucun frais ni impôt'));
+  if(S.nw) kids.push(h('button', { class:'link full', onclick:() => { S.nw = 0; save(); go(up); } }, 'Plus tard'));
+  const out = [ back(up, c), h('h1', null, e.name), h('div', { class:'total' }, E0.format(g.v)),
+    h('div', { class:'sub' }, h('span', null, E0.format(fees(e)) + ' de frais par an'), h('span', null, E0.format(taxe(e)) + ' d’impôts latents sur ' + E0.format(pvv) + ' de plus-value')) ];
+  if(S.nw && S.envs.some(todo)) out.push(h('div', { class:'note' }, 'Il reste ' + S.envs.filter(todo).length + ' enveloppe(s) à compléter.'));
+  out.push(h('h2', null, 'Frais et impôts'), h('div', { class:'card form' }, ...kids));
+  if(e.type === 'av') out.push(ratesCard(e));
+  out.push(h('div', { class:'note' }, 'Les taux dépendent de l’enveloppe et de ta situation. Renseigne ceux de ton contrat ou de ton relevé.'));
+  return h('div', null, ...out);
 }
 function vNetR(a, b){ return a === 'c' ? vNetClass(b) : a === 'e' ? vNetEnv(b) : vNet(); }
 
@@ -596,12 +661,12 @@ async function quote(sym){
   }
   return { p:n.price, c:n.currency, fx:fxr };
 }
-function applyBuy(b, qty, price, fxr){
+function applyBuy(b, qty, price){
   const e = S.envs.find(x => x.id === b.env); if(!e){ alert('Enveloppe introuvable.'); return; }
   const l = e.lines.find(x => x.m && x.sym === b.sym);
   if(l){ const nq = l.qty + qty; l.cost = (l.cost * l.qty + price * qty) / nq; l.qty = nq; }
   else e.lines.push({ id:uid(), m:1, sym:b.sym, name:b.name, qty, cost:price, divs:[] });
-  b.done = { t:Date.now(), q:qty, p:price, e:qty * price * fxr };
+  b.done = { t:Date.now(), q:qty, p:price, e:qty * price };
   save(); render(); refresh();
   toast('Achat validé : ' + N.format(+qty.toFixed(4)) + ' part(s) de ' + b.name + ' ajoutée(s) à « ' + e.name + ' »');
 }
@@ -619,14 +684,14 @@ async function confirmBuy(b, box){
   box.replaceChildren(h('div', { class:'empty' }, 'Récupération du cours…'));
   let q = null, err = '';
   try{ q = await quote(b.sym); }catch(e){ err = e.message; }
-  const pI = numIn(), qI = numIn(), fxr = q ? q.fx : 1;
-  if(q){ pI.value = +q.p.toFixed(4); qI.value = +(b.amt / (q.p * fxr)).toFixed(4); }
-  pI.oninput = () => { const p = parseFloat(pI.value); if(p > 0) qI.value = +(b.amt / (p * fxr)).toFixed(4); };
+  const fxr = q ? q.fx : 1, pI = numIn(), qI = numIn();
+  if(q){ pI.value = +(q.p * fxr).toFixed(4); qI.value = +(b.amt / (q.p * fxr)).toFixed(4); }
+  pI.oninput = () => { const p = parseFloat(pI.value); if(p > 0) qI.value = +(b.amt / p).toFixed(4); };
   box.replaceChildren(h('div', { class:'form', style:'border-top:1px solid var(--line)' },
-    err ? h('div', { class:'note err full' }, 'Cours indisponible (' + err + '). Saisis le prix payé, dans la devise du titre.')
-        : h('div', { class:'note full' }, 'Cours actuel pré-rempli (' + q.c + '). Ajuste avec ton prix d’exécution réel.'),
-    fld('Prix par part' + (q ? ' (' + q.c + ')' : ''), pI), fld('Nombre de parts', qI),
-    h('button', { class:'btn', onclick:() => { const p = parseFloat(pI.value), n = parseFloat(qI.value); if(!(p > 0) || !(n > 0)) return; applyBuy(b, n, p, fxr); } }, 'Confirmer l’achat'),
+    err ? h('div', { class:'note err full' }, 'Cours indisponible (' + err + '). Saisis le prix payé, en euros.')
+        : h('div', { class:'note full' }, 'Cours actuel converti en euros (cours d’origine : ' + q.c + '). Ajuste avec ton prix d’exécution réel.'),
+    fld('Prix par part (€)', pI), fld('Nombre de parts', qI),
+    h('button', { class:'btn', onclick:() => { const p = parseFloat(pI.value), n = parseFloat(qI.value); if(!(p > 0) || !(n > 0)) return; applyBuy(b, n, p); } }, 'Confirmer l’achat'),
     h('button', { class:'btn alt', onclick:() => box.replaceChildren() }, 'Annuler')));
 }
 const small = 'padding:8px 14px';
@@ -821,7 +886,7 @@ function bud(){
 }
 const spend = () => bud().cats.reduce((a, c) => a + (c.amt || 0), 0);
 const provMonthly = () => { const T = (S.st || {})[nowY()]; return T ? T.p.reduce((a, p) => a + p.amt, 0) : 0; };
-const perfNow = () => { const a = agg(allLines()); return a.c ? (a.v - a.c) / a.c * 100 : null; };
+const perfNow = () => { const a = agg(allLines()); return a.c ? (a.v + a.dv - a.c) / a.c * 100 : null; };
 const fr1 = v => v.toFixed(1).replace('.', ',');
 const gotoB = (B, to) => { B.step = to; save(); render(); };
 
@@ -993,7 +1058,7 @@ function compoundCard(){
   const perf = perfNow();
   const pb = perf != null
     ? h('div', { class:'card', style:'padding:14px;margin-bottom:10px' },
-        h('div', { class:'m' }, 'Performance actuelle de ton patrimoine (gain total sur tes prix d’achat)'),
+        h('div', { class:'m' }, 'Performance actuelle (plus-values et dividendes compris)'),
         h('div', { class:'total ' + (perf >= 0 ? 'up' : 'down'), style:'font-size:26px' }, (perf >= 0 ? '+' : '') + fr1(perf) + ' %'),
         h('div', { class:'note' }, 'Ce n’est pas un rendement annuel, mais le gain cumulé depuis tes achats.'),
         h('button', { class:'chip', style:'margin-top:8px', onclick:() => { rI.value = +perf.toFixed(2); upd(); } }, 'Utiliser ' + fr1(perf) + ' % comme rendement'))
