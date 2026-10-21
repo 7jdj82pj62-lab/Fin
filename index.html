@@ -90,6 +90,8 @@ nav{position:sticky;bottom:0;display:flex;background:var(--surface);border-top:1
 nav button{flex:1;font:inherit;font-size:12px;padding:12px 2px;background:none;border:0;color:var(--muted)}
 nav button[aria-current]{color:var(--accent);font-weight:600}
 nav button:disabled{opacity:.45}
+nav a{flex:1;text-align:center;font-size:12px;padding:12px 2px;color:var(--muted);text-decoration:none}
+nav a[aria-current]{color:var(--accent);font-weight:600}
 </style>
 </head>
 <body>
@@ -1111,14 +1113,22 @@ function render(){
   let k = r[0];
   if(S.step != null && !k) k = 'o';
   if(k === 'o' && S.step == null) k = '';
-  const V = { o:vOnb, c:vClass, e:vEnv, l:vLine, n:vNetR, s:vStratR, g:vGoalsR, u:vTools }[k] || vHome;
-  $('#app').replaceChildren(V(...r.slice(1)));
+  try{
+    const V = { o:vOnb, c:vClass, e:vEnv, l:vLine, n:vNetR, s:vStratR, g:vGoalsR, u:vTools }[k] || vHome;
+    $('#app').replaceChildren(V(...r.slice(1)));
+  }catch(err){
+    console.error(err);
+    $('#app').replaceChildren(h('div', { class:'card', style:'padding:16px' },
+      h('div', { class:'n' }, 'Cet écran n’a pas pu s’afficher'),
+      h('div', { class:'m', style:'margin:6px 0 12px' }, String((err && err.message) || err)),
+      h('button', { class:'btn', onclick:() => { location.hash = '#/'; } }, 'Revenir à l’accueil')));
+  }
   navR(k);
 }
 function navR(k){
   const cur = k === 'n' ? 1 : k === 's' ? 2 : k === 'g' ? 3 : k === 'u' ? 4 : 0;
-  $('#nav').replaceChildren(...[['Brut', 1, '#/'], ['Net', 1, '#/n'], ['Stratégie', 1, '#/s'], ['Objectifs', 1, '#/g'], ['Outils', 1, '#/u']].map(([n, on, hr], i) =>
-    h('button', { disabled:!on, 'aria-current':on && i === cur ? 'page' : null, title:on ? null : 'Bientôt', onclick:on ? () => go(hr) : null }, n)));
+  const items = [['Brut', '#/'], ['Net', '#/n'], ['Stratégie', '#/s'], ['Objectifs', '#/g'], ['Outils', '#/u']];
+  $('#nav').replaceChildren(...items.map(([n, hr], i) => h('a', { href:hr, 'aria-current':i === cur ? 'page' : null }, n)));
 }
 window.onhashchange = () => { render(); window.scrollTo(0, 0); };
 render(); refresh();
