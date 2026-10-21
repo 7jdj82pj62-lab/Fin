@@ -631,7 +631,10 @@ function vNetEnv(id){
     });
     if(showEnv){ const f = rd(envFee), k = rd(envFix); if(f === undefined) delete e.fee; else e.fee = f; if(k === undefined) delete e.fix; else e.fix = k; }
     const t = rd(tax); if(t === undefined) delete e.tax; else e.tax = t;
-    save(); next();
+    save();
+    if(S.nw){ next(); return; }
+    toast('Frais et impôts de « ' + e.name + ' » enregistrés');
+    render();
   };
   const kids = [];
   if(hasM){
