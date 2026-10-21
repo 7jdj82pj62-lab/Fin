@@ -15,6 +15,14 @@ window.addEventListener('error', function(e){
 });
 </script>
 <style>
+button.row{cursor:pointer;transition:background .15s}
+button.row:hover{background:rgba(127,127,127,.08)}
+button.row:active{background:rgba(127,127,127,.18)}
+button.row::after{content:'›';font-size:22px;line-height:1;color:var(--muted);margin-left:2px;flex:none}
+.link{text-decoration:underline;text-underline-offset:3px}
+nav a{-webkit-tap-highlight-color:transparent}
+nav a[aria-current]{box-shadow:inset 0 3px 0 var(--accent)}
+.btn:active,.chip:active,.mtile:active{transform:scale(.98)}
 :root{
   --bg:#EEF1F4; --surface:#FFFFFF; --ink:#14202B; --muted:#5E6B78; --line:#D9DFE5;
   --accent:#1D4ED8; --up:#13795B; --down:#B42318; --warn:#B26A00;
@@ -281,7 +289,16 @@ function row(n, m, x, href){
 /* ---------- Écrans ---------- */
 function vHome(){
   const L = allLines(), a = agg(L), pv = a.v - a.c;
-  const d = h('div', null, h('h1', null, 'Patrimoine brut'), h('div', { class:'total' }, E0.format(a.v)), note(a));
+  const sNow = sums(S.envs), netNow = a.v - sNow.t, sup = netNow / (1 + infl() / 100);
+  const d = h('div', null, h('h1', null, 'Patrimoine'),
+    h('div', { class:'card', style:'padding:16px;margin-top:6px' },
+      h('div', { class:'m' }, 'Patrimoine brut'),
+      h('div', { class:'total', style:'font-size:32px' }, E0.format(a.v)),
+      h('div', { style:'display:flex;justify-content:space-between;margin-top:12px' }, h('span', { class:'m' }, 'Impôts latents'), h('span', { class:'n down' }, '− ' + E0.format(sNow.t))),
+      h('div', { style:'display:flex;justify-content:space-between;align-items:baseline;margin-top:8px;padding-top:10px;border-top:1px solid var(--line)' },
+        h('span', { class:'n' }, 'Patrimoine net'), h('span', { class:'n up', style:'font-size:22px' }, E0.format(netNow))),
+      h('div', { class:'note', style:'margin-top:8px' }, 'En pouvoir d’achat d’aujourd’hui (inflation ' + fr1(infl()) + ' %) : ' + E0.format(sup))),
+    note(a));
   if(a.v) d.append(h('div', { class:'tiles' },
     tile('Plus-value latente', sg(pv), a.c ? P.format(pv / a.c) + ' sur ' + E0.format(a.c) + ' investis' : '', a.c ? cls(pv) : '', 1),
     L.some(l => l.m) ? tile('Variation du jour', sg(a.d), a.v - a.d ? P.format(a.d / (a.v - a.d)) : '', cls(a.d)) : null,
@@ -326,8 +343,9 @@ function vEnv(id){
     h('div', { class:'m' }, 'Frais et impôts'),
     h('div', { class:'n', style:'margin:4px 0 10px' }, feesTxt),
     h('details', { class:'fees-edit' },
-      h('summary', { class:'btn' }, '✎ Modifier les frais et impôts'),
-      h('div', { style:'margin-top:12px' }, feesCard(e)))));
+      h('summary', { class:'btn' }, '✎ Modifier les impôts et les frais'),
+      h('div', { style:'margin-top:12px' }, feesCard(e, true)))));
+  if(e.type === 'av') d.append(ratesCard(e));
   d.append(h('h2', null, 'Lignes'));
   const card = h('div', { class:'card list' });
   e.lines.map(l => [l, val(l)]).sort((p, q) => (q[1] ? q[1].v : 0) - (p[1] ? p[1].v : 0)).forEach(([l, x]) => {
@@ -523,19 +541,6 @@ const todo = e => e.tax == null || e.lines.some(l => l.m && isETF(l) && l.fee ==
 const ordOf = e => e.lines.reduce((a, l) => a + (l.ordFee || 0), 0);
 const sums = es => es.reduce((o, e) => { o.p += fp(e); o.x += fx(e); o.f += fees(e); o.t += taxe(e); o.o += ordOf(e); return o; }, { p:0, x:0, f:0, t:0, o:0 });
 
-function donut(it, top, sub){
-  const R = 54, C = 2 * Math.PI * R, tot = it.reduce((a, o) => a + o.v, 0);
-  let off = 0, seg = '';
-  if(tot > 0) it.filter(o => o.v > 0).forEach(o => {
-    const len = o.v / tot * C, dl = Math.max(0, len - 2);
-    seg += '<circle r="54" cx="70" cy="70" fill="none" stroke="var(--c' + o.i + ')" stroke-width="16" stroke-dasharray="' + dl.toFixed(2) + ' ' + (C - dl).toFixed(2) + '" stroke-dashoffset="' + (-off).toFixed(2) + '"/>';
-    off += len;
-  });
-  return '<svg viewBox="0 0 140 140" width="176" height="176" role="img" aria-label="Répartition par classe d’actifs" style="display:block;margin:8px auto"><g transform="rotate(-90 70 70)">' +
-    '<circle r="54" cx="70" cy="70" fill="none" stroke="var(--line)" stroke-width="16"/>' + seg + '</g>' +
-    '<text x="70" y="68" text-anchor="middle" font-size="16" font-weight="700" fill="var(--ink)">' + top + '</text>' +
-    '<text x="70" y="85" text-anchor="middle" font-size="9" fill="var(--muted)">' + sub + '</text></svg>';
-}
 const fmtK = v => v >= 10000 ? Math.round(v / 1000) + ' k€' : v >= 1000 ? (v / 1000).toFixed(1).replace('.', ',') + ' k€' : Math.round(v) + ' €';
 function donut(parts, top, sub){
   const tot = parts.reduce((a, p) => a + p.v, 0);
@@ -553,38 +558,33 @@ function donut(parts, top, sub){
     '<text x="21" y="26" text-anchor="middle" font-size="2.4" style="fill:var(--muted)">' + sub + '</text></svg>';
   return w;
 }
+const feeTodo = e => e.lines.some(l => l.m && isETF(l) && l.fee == null) || (e.lines.some(l => !l.m) && e.fee == null);
 function vNet(){
-  const a = agg(allLines()), s = sums(S.envs), net = a.v - s.t, pc = x => a.v ? PP.format(x / a.v) : '–', td = S.envs.filter(todo);
-  const d = h('div', null, h('h1', null, 'Patrimoine net'), h('div', { class:'total' }, E0.format(net)));
-  if(!S.envs.length){ d.append(h('div', { class:'note' }, 'Ajoute d’abord tes enveloppes dans l’onglet Brut.')); return d; }
-  d.append(h('div', { class:'note' }, 'Ce qu’il te resterait après impôts sur les plus-values si tu vendais tout aujourd’hui.'));
-  const lg = (col, k, v, sub) => h('div', { style:'display:flex;align-items:center;gap:10px;margin-top:12px' },
-    h('span', { class:'dot', style:'background:' + col }), h('div', { style:'flex:1' }, k, sub ? h('div', { class:'m' }, sub) : null), h('div', { class:'n' }, v));
-  d.append(h('div', { class:'card', style:'margin-top:14px;padding:16px' },
-    h('div', { class:'seg', style:'height:22px;margin-top:0' },
-      h('i', { style:'flex:' + Math.max(net, 0) + ';background:var(--accent)' }),
-      s.t > 0 ? h('i', { style:'flex:' + s.t + ';background:var(--warn)' }) : null),
-    lg('var(--accent)', 'Patrimoine net', E0.format(net), pc(net) + ' du brut'),
-    lg('var(--warn)', 'Impôts latents', '− ' + E0.format(s.t), pc(s.t) + ' du brut'),
-    h('div', { style:'display:flex;justify-content:space-between;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);color:var(--muted);font-size:14px' },
-      h('span', null, 'Patrimoine brut'), h('span', null, E0.format(a.v)))),
-    h('div', { class:'tiles' }, tile('Frais par an', E0.format(s.f), pc(s.f) + ' du patrimoine'), tile('Frais par mois', E0.format(s.f / 12), 'en moyenne'), tile('Frais d’ordres', E0.format(s.o), 'payés une fois, à l’achat')));
-  if(td.length) d.append(h('div', { class:'card', style:'margin-top:14px;padding:14px' }, h('div', { class:'n' }, td.length + ' enveloppe(s) à compléter'),
-    h('div', { class:'m', style:'margin:4px 0 12px' }, 'Tant que les frais et impôts ne sont pas saisis, le net est surestimé.'),
-    h('button', { class:'btn', onclick:() => { S.nw = 1; save(); go('#/n/e/' + td[0].id); } }, 'Compléter maintenant')));
-  d.append(superCard(a.v, s));
-  const mode = S.nv === 't' ? 't' : 'f', mt = o => mode === 'f' ? o.x.f : o.x.t, tot = mode === 'f' ? s.f : s.t;
-  const cs = CLASSES.map((c, i) => ({ c, i, es:classEnvs(c) })).filter(o => o.es.length).map(o => ({ ...o, x:sums(o.es) })).sort((p, q) => mt(q) - mt(p));
-  d.append(h('h2', null, 'Répartition par classe'),
-    h('div', { class:'chips' },
-      h('button', { class:'chip', 'aria-pressed':String(mode === 'f'), onclick:() => { S.nv = 'f'; save(); render(); } }, 'Frais par an'),
-      h('button', { class:'chip', 'aria-pressed':String(mode === 't'), onclick:() => { S.nv = 't'; save(); render(); } }, 'Impôts latents')),
-    donut(cs.filter(o => mt(o) > 0).map(o => ({ v:mt(o), i:o.i })), fmtK(tot), mode === 'f' ? 'frais / an' : 'impôts latents'));
+  const s = sums(S.envs), a = agg(allLines());
+  const d = h('div', null, h('h1', null, 'Frais'),
+    h('div', { class:'total' }, E0.format(s.f) + ' /an'),
+    h('div', { class:'sub' }, s.o ? h('span', null, E0.format(s.o) + ' de frais d’ordres payés (une fois)') : null));
+  if(!S.envs.length){ d.append(h('div', { class:'note' }, 'Ajoute d’abord tes enveloppes dans l’onglet Patrimoine.')); return d; }
+  d.append(h('div', { class:'note' }, 'Frais de gestion des ETF, frais fixes et frais payés sur les ordres. Les impôts se gèrent dans l’onglet Patrimoine.'));
+  const miss = S.envs.filter(feeTodo);
+  if(miss.length) d.append(h('div', { class:'card', style:'margin-top:14px;padding:14px' },
+    h('div', { class:'n' }, miss.length + ' enveloppe(s) sans frais renseignés'),
+    h('div', { class:'m', style:'margin:4px 0 12px' }, 'Ouvre chaque enveloppe pour saisir ses frais.'),
+    h('button', { class:'btn', onclick:() => { S.nw = 1; save(); go('#/n/e/' + miss[0].id); } }, 'Compléter maintenant')));
+  d.append(h('div', { class:'tiles' }, tile('Frais par an', E0.format(s.f), a.v ? PP.format(s.f / a.v) + ' du patrimoine' : ''),
+    tile('Frais par mois', E0.format(s.f / 12), 'en moyenne')));
+  const cs = CLASSES.map((c, i) => ({ c, i, es:classEnvs(c) })).filter(o => o.es.length).map(o => ({ ...o, x:sums(o.es) })).sort((p, q) => q.x.f - p.x.f);
+  d.append(h('h2', null, 'Où partent les frais'),
+    donut(cs.filter(o => o.x.f > 0).map(o => ({ v:o.x.f, i:o.i })), fmtK(s.f), 'frais / an'));
   const card = h('div', { class:'card list', style:'margin-top:8px' });
-  cs.forEach(o => card.append(h('button', { class:'row', onclick:() => go('#/n/c/' + o.i) },
-    h('span', { class:'dot', style:'background:var(--c' + o.i + ')' }),
-    h('div', { class:'l' }, h('div', { class:'n' }, o.c), h('div', { class:'m' }, mode === 'f' ? E0.format(o.x.t) + ' d’impôts latents' : E0.format(o.x.f) + ' de frais par an')),
-    h('div', { class:'r' }, h('div', { class:'n' }, E0.format(mt(o)) + (mode === 'f' ? ' /an' : '')), h('div', { class:'m' }, tot ? P0.format(mt(o) / tot) : '0 %')))));
+  cs.forEach(o => {
+    const share = s.f ? o.x.f / s.f : 0;
+    card.append(h('button', { class:'row', onclick:() => go('#/n/c/' + o.i) },
+      h('span', { class:'dot', style:'background:var(--c' + o.i + ')' }),
+      h('div', { class:'l' }, h('div', { class:'n' }, o.c), h('div', { class:'m' }, P0.format(share) + ' des frais'), h('div', { class:'bar' }, h('i', { style:'width:' + share * 100 + '%;background:var(--c' + o.i + ')' }))),
+      h('div', { class:'r' }, h('div', { class:'n' }, E0.format(o.x.f) + ' /an'))));
+  });
+  if(!cs.length) card.append(h('div', { class:'empty' }, 'Aucune enveloppe pour l’instant.'));
   d.append(card, projCard(a.v, s));
   return d;
 }
@@ -592,14 +592,15 @@ function vNetClass(i){
   const c = CLASSES[i]; if(!c) return vNet();
   const es = classEnvs(c), x = sums(es);
   const card = h('div', { class:'card list' });
-  es.forEach(e => {
-    const g = agg(e.lines), f = fees(e);
-    card.append(h('button', { class:'row', onclick:() => go('#/n/e/' + e.id) },
-      h('div', { class:'l' }, h('div', { class:'n' }, e.name), h('div', { class:'m' }, todo(e) ? 'Frais et impôts à renseigner' : E0.format(g.v) + ' brut · ' + (g.v ? PP.format(f / g.v) : '–') + ' de frais/an')),
-      h('div', { class:'r' }, h('div', { class:'n' }, E0.format(f) + ' /an'), h('div', { class:'m' }, E0.format(taxe(e)) + ' d’impôts'))));
-  });
-  return h('div', null, back('#/n', 'Patrimoine net'), h('h1', null, c), h('div', { class:'total' }, E0.format(x.f) + ' /an'),
-    h('div', { class:'sub' }, h('span', null, E0.format(x.t) + ' d’impôts latents')), h('h2', null, 'Enveloppes'), card);
+  es.forEach(e => card.append(h('button', { class:'row', onclick:() => go('#/n/e/' + e.id) },
+    h('div', { class:'l' }, h('div', { class:'n' }, e.name),
+      h('div', { class:'m' }, feeTodo(e) ? 'Frais à renseigner' : E0.format(fees(e)) + ' de frais par an')),
+    h('div', { class:'r' }, h('div', { class:'n' }, E0.format(fees(e)) + ' /an')))));
+  if(!es.length) card.append(h('div', { class:'empty' }, 'Aucune enveloppe dans cette classe.'));
+  return h('div', null, back('#/n', 'Frais'), h('h1', null, c),
+    h('div', { class:'total' }, E0.format(x.f) + ' /an'),
+    h('div', { class:'sub' }, x.o ? h('span', null, E0.format(x.o) + ' de frais d’ordres payés (une fois)') : null),
+    h('h2', null, 'Enveloppes'), card);
 }
 function ratesCard(e){
   e.rates = e.rates || {};
@@ -618,7 +619,8 @@ function ratesCard(e){
     h('div', { class:'card form', style:'margin-top:10px' }, fld('Année', yI), fld('Taux net (%)', rI),
       h('button', { class:'btn full', onclick:() => { const y = parseInt(yI.value, 10), r = pf(rI.value); if(!(y > 1990) || isNaN(r)) return; e.rates[y] = r; save(); render(); } }, 'Ajouter ce taux')));
 }
-function feesCard(e){
+function feesCard(e, withTax){
+  const up = '#/n/c/' + CLASSES.indexOf(TYPES[e.type].c);
   const hasM = e.lines.some(l => l.m), showEnv = e.lines.some(l => !l.m) || !hasM;
   const num = (v, ph) => { const i = numIn(); i.placeholder = ph; if(v != null) i.value = v; return i; };
   const KINDS = [['', 'Type non précisé'], ['ETF', 'ETF'], ['Action', 'Action'], ['Crypto', 'Crypto'], ['Fonds', 'Fonds'], ['Indice', 'Indice'], ['Autre', 'Autre']];
@@ -629,7 +631,7 @@ function feesCard(e){
   });
   const envFee = num(e.fee, '0'), envFix = num(e.fix, '0'), tax = num(e.tax, '0');
   const rd = x => { if(x.value === '') return undefined; const v = pf(x.value); return isNaN(v) ? undefined : v; };
-  const next = () => { const n = S.envs.find(x => todo(x) && x.id !== e.id); if(S.nw && n) go('#/n/e/' + n.id); else { S.nw = 0; save(); go(up); } };
+  const next = () => { const n = S.envs.find(x => (withTax ? todo(x) : feeTodo(x)) && x.id !== e.id); if(S.nw && n) go('#/n/e/' + n.id); else { S.nw = 0; save(); go(up); } };
   const saveAll = () => {
     lineIn.forEach(o => {
       if(o.kind.value) o.l.kind = o.kind.value; else delete o.l.kind;
@@ -639,7 +641,7 @@ function feesCard(e){
       if(oo === undefined) delete o.l.ordFee; else o.l.ordFee = oo;
     });
     if(showEnv){ const f = rd(envFee), k = rd(envFix); if(f === undefined) delete e.fee; else e.fee = f; if(k === undefined) delete e.fix; else e.fix = k; }
-    const t = rd(tax); if(t === undefined) delete e.tax; else e.tax = t;
+    if(withTax){ const t = rd(tax); if(t === undefined) delete e.tax; else e.tax = t; }
     save();
     if(S.nw){ next(); return; }
     toast('Frais et impôts de « ' + e.name + ' » enregistrés');
@@ -656,22 +658,22 @@ function feesCard(e){
     });
   }
   if(showEnv) kids.push(h('div', { class:'full m' }, hasM ? 'Lignes non cotées' : 'Frais de l’enveloppe'), fld('Frais de gestion annuels (% de l’encours)', envFee), fld('Frais fixes annuels (€)', envFix));
-  kids.push(fld('Impôt sur la plus-value (%)', tax, 1));
+  if(withTax) kids.push(fld('Impôt sur la plus-value (%)', tax, 1));
   kids.push(h('button', { class:'btn full', onclick:saveAll }, S.nw ? 'Enregistrer et continuer' : 'Enregistrer'));
-  kids.push(h('button', { class:'btn alt full', onclick:() => { lineIn.forEach(o => { o.f.value = 0; o.k.value = 0; o.o.value = 0; }); envFee.value = 0; envFix.value = 0; tax.value = 0; saveAll(); } }, 'Aucun frais ni impôt'));
+  kids.push(h('button', { class:'btn alt full', onclick:() => { lineIn.forEach(o => { o.f.value = 0; o.k.value = 0; o.o.value = 0; }); envFee.value = 0; envFix.value = 0; if(withTax) tax.value = 0; saveAll(); } }, withTax ? 'Aucun frais ni impôt' : 'Aucun frais'));
   if(S.nw) kids.push(h('button', { class:'link full', onclick:() => { S.nw = 0; save(); go(up); } }, 'Plus tard'));
   return h('div', { class:'card form' }, ...kids);
 }
 function vNetEnv(id){
   const e = S.envs.find(x => x.id === id); if(!e) return vNet();
-  const g = agg(e.lines), c = TYPES[e.type].c, up = '#/n/c/' + CLASSES.indexOf(c), pvv = Math.max(0, g.v - g.c);
-  const out = [ back(up, c), h('h1', null, e.name), h('div', { class:'total' }, E0.format(g.v)),
-    h('div', { class:'sub' }, h('span', null, E0.format(fees(e)) + ' de frais par an'), h('span', null, E0.format(taxe(e)) + ' d’impôts latents sur ' + E0.format(pvv) + ' de plus-value'), ordOf(e) ? h('span', null, E0.format(ordOf(e)) + ' de frais d’ordres') : null) ];
-  if(S.nw && S.envs.some(todo)) out.push(h('div', { class:'note' }, 'Il reste ' + S.envs.filter(todo).length + ' enveloppe(s) à compléter.'));
-  out.push(h('h2', null, 'Frais et impôts'), feesCard(e));
-  if(e.type === 'av') out.push(ratesCard(e));
-  out.push(h('div', { class:'note' }, 'Les taux dépendent de l’enveloppe et de ta situation. Renseigne ceux de ton contrat ou de ton relevé.'));
-  return h('div', null, ...out);
+  const c = TYPES[e.type].c, up = '#/n/c/' + CLASSES.indexOf(c);
+  const d = h('div', null, back(up, c), h('h1', null, e.name),
+    h('div', { class:'total' }, E0.format(fees(e)) + ' /an'),
+    h('div', { class:'sub' }, ordOf(e) ? h('span', null, E0.format(ordOf(e)) + ' de frais d’ordres payés (une fois)') : null));
+  if(S.nw && S.envs.some(feeTodo)) d.append(h('div', { class:'note' }, 'Il reste ' + S.envs.filter(feeTodo).length + ' enveloppe(s) à compléter.'));
+  d.append(h('h2', null, 'Frais'), feesCard(e, false),
+    h('div', { class:'note' }, 'Les taux figurent sur ton relevé ou sur le site de ton courtier ou assureur.'));
+  return d;
 }
 function vNetR(a, b){ return a === 'c' ? vNetClass(b) : a === 'e' ? vNetEnv(b) : vNet(); }
 
@@ -1223,7 +1225,7 @@ function render(){
 }
 function navR(k){
   const cur = k === 'n' ? 1 : k === 's' ? 2 : k === 'g' ? 3 : k === 'u' ? 4 : 0;
-  const items = [['Brut', '#/'], ['Net', '#/n'], ['Stratégie', '#/s'], ['Objectifs', '#/g'], ['Outils', '#/u']];
+  const items = [['Patrimoine', '#/'], ['Frais', '#/n'], ['Stratégie', '#/s'], ['Objectifs', '#/g'], ['Outils', '#/u']];
   const leave = () => { if(S.step != null){ S.step = null; S.done = true; save(); render(); } };
   $('#nav').replaceChildren(...items.map(([n, hr], i) => h('a', { href:hr, onclick:leave, 'aria-current':i === cur ? 'page' : null }, n)));
 }
