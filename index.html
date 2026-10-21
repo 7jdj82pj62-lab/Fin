@@ -317,6 +317,13 @@ function vEnv(id){
   const t = TYPES[e.type], a = agg(e.lines);
   const d = h('div', null, back('#/c/' + CLASSES.indexOf(t.c), t.c), head(e.name, a), note(a, e.lines));
   if(S.step != null) d.append(h('button', { class:'btn', style:'margin-top:14px', onclick:() => { S.step++; save(); go('#/o'); } }, 'Étape suivante du questionnaire'));
+  const feesTxt = (e.tax == null && !e.lines.some(l => l.m && l.fee != null) && e.fee == null)
+    ? 'Frais et impôts non renseignés'
+    : 'Impôt sur la plus-value : ' + (e.tax != null ? fr1(e.tax) + ' %' : '–') + ' · frais : ' + E0.format(fees(e)) + ' par an';
+  d.append(h('div', { class:'card', style:'padding:14px;margin-top:14px' },
+    h('div', { class:'m' }, 'Frais et impôts de cette enveloppe'),
+    h('div', { class:'n', style:'margin:4px 0 10px' }, feesTxt),
+    h('button', { class:'btn alt', onclick:() => go('#/n/e/' + e.id) }, 'Modifier les frais et impôts')));
   d.append(h('h2', null, 'Lignes'));
   const card = h('div', { class:'card list' });
   e.lines.map(l => [l, val(l)]).sort((p, q) => (q[1] ? q[1].v : 0) - (p[1] ? p[1].v : 0)).forEach(([l, x]) => {
