@@ -67,6 +67,8 @@ label{display:block;font-size:13px;color:var(--muted);margin-bottom:4px}
 .link.del{color:var(--down)}
 details{margin-top:24px;font-size:14px;color:var(--muted)}
 summary{cursor:pointer}
+.fees-edit > summary{list-style:none;display:block;text-align:center}
+.fees-edit > summary::-webkit-details-marker{display:none}
 details input{margin:10px 0}
 .tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
 .tile{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;min-width:0}
@@ -321,9 +323,11 @@ function vEnv(id){
     ? 'Frais et impôts non renseignés'
     : 'Impôt sur la plus-value : ' + (e.tax != null ? fr1(e.tax) + ' %' : '–') + ' · frais : ' + E0.format(fees(e)) + ' par an';
   d.append(h('div', { class:'card', style:'padding:14px;margin-top:14px' },
-    h('div', { class:'m' }, 'Frais et impôts de cette enveloppe'),
+    h('div', { class:'m' }, 'Frais et impôts'),
     h('div', { class:'n', style:'margin:4px 0 10px' }, feesTxt),
-    h('button', { class:'btn alt', onclick:() => go('#/n/e/' + e.id) }, 'Modifier les frais et impôts')));
+    h('details', { class:'fees-edit' },
+      h('summary', { class:'btn' }, '✎ Modifier les frais et impôts'),
+      h('div', { style:'margin-top:12px' }, feesCard(e)))));
   d.append(h('h2', null, 'Lignes'));
   const card = h('div', { class:'card list' });
   e.lines.map(l => [l, val(l)]).sort((p, q) => (q[1] ? q[1].v : 0) - (p[1] ? p[1].v : 0)).forEach(([l, x]) => {
@@ -614,9 +618,7 @@ function ratesCard(e){
     h('div', { class:'card form', style:'margin-top:10px' }, fld('Année', yI), fld('Taux net (%)', rI),
       h('button', { class:'btn full', onclick:() => { const y = parseInt(yI.value, 10), r = pf(rI.value); if(!(y > 1990) || isNaN(r)) return; e.rates[y] = r; save(); render(); } }, 'Ajouter ce taux')));
 }
-function vNetEnv(id){
-  const e = S.envs.find(x => x.id === id); if(!e) return vNet();
-  const g = agg(e.lines), c = TYPES[e.type].c, up = '#/n/c/' + CLASSES.indexOf(c), pvv = Math.max(0, g.v - g.c);
+function feesCard(e){
   const hasM = e.lines.some(l => l.m), showEnv = e.lines.some(l => !l.m) || !hasM;
   const num = (v, ph) => { const i = numIn(); i.placeholder = ph; if(v != null) i.value = v; return i; };
   const KINDS = [['', 'Type non précisé'], ['ETF', 'ETF'], ['Action', 'Action'], ['Crypto', 'Crypto'], ['Fonds', 'Fonds'], ['Indice', 'Indice'], ['Autre', 'Autre']];
@@ -658,10 +660,15 @@ function vNetEnv(id){
   kids.push(h('button', { class:'btn full', onclick:saveAll }, S.nw ? 'Enregistrer et continuer' : 'Enregistrer'));
   kids.push(h('button', { class:'btn alt full', onclick:() => { lineIn.forEach(o => { o.f.value = 0; o.k.value = 0; o.o.value = 0; }); envFee.value = 0; envFix.value = 0; tax.value = 0; saveAll(); } }, 'Aucun frais ni impôt'));
   if(S.nw) kids.push(h('button', { class:'link full', onclick:() => { S.nw = 0; save(); go(up); } }, 'Plus tard'));
+  return h('div', { class:'card form' }, ...kids);
+}
+function vNetEnv(id){
+  const e = S.envs.find(x => x.id === id); if(!e) return vNet();
+  const g = agg(e.lines), c = TYPES[e.type].c, up = '#/n/c/' + CLASSES.indexOf(c), pvv = Math.max(0, g.v - g.c);
   const out = [ back(up, c), h('h1', null, e.name), h('div', { class:'total' }, E0.format(g.v)),
     h('div', { class:'sub' }, h('span', null, E0.format(fees(e)) + ' de frais par an'), h('span', null, E0.format(taxe(e)) + ' d’impôts latents sur ' + E0.format(pvv) + ' de plus-value'), ordOf(e) ? h('span', null, E0.format(ordOf(e)) + ' de frais d’ordres') : null) ];
   if(S.nw && S.envs.some(todo)) out.push(h('div', { class:'note' }, 'Il reste ' + S.envs.filter(todo).length + ' enveloppe(s) à compléter.'));
-  out.push(h('h2', null, 'Frais et impôts'), h('div', { class:'card form' }, ...kids));
+  out.push(h('h2', null, 'Frais et impôts'), feesCard(e));
   if(e.type === 'av') out.push(ratesCard(e));
   out.push(h('div', { class:'note' }, 'Les taux dépendent de l’enveloppe et de ta situation. Renseigne ceux de ton contrat ou de ton relevé.'));
   return h('div', null, ...out);
