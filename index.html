@@ -109,6 +109,8 @@ nav a[aria-current]{color:var(--accent);font-weight:600}
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
+/* nombre saisi au format français (virgule ou point) ; NaN si vide ou invalide */
+const pf = v => { const t = String(v == null ? '' : v).replace(/\s/g, '').replace(',', '.'); return t === '' ? NaN : parseFloat(t); };
 const h = (t, a, ...c) => {
   const e = document.createElement(t);
   for(const k in a || {}){
@@ -190,17 +192,17 @@ async function fetchInfl(){
   if(S.infl && Date.now() - S.infl.t < 7 * 864e5) return;
   if(S.inflTry && Date.now() - S.inflTry < 3600e3) return;
   inflBusy = true; S.inflTry = Date.now();
-  try{ const j = await api({ action:'inflation' }); if(typeof j.rate !== 'number' || !isFinite(j.rate)) throw new Error('réponse inattendue'); S.infl = { rate:j.rate, period:String(j.period || ''), t:Date.now() }; save(); }
-  catch(e){} finally { inflBusy = false; }
+  try{ const j = await api({ action:'inflation' }); if(typeof j.rate !== 'number' || !isFinite(j.rate)) throw new Error('réponse inattendue du relais'); S.infl = { rate:j.rate, period:String(j.period || ''), t:Date.now() }; delete S.inflErr; save(); }
+  catch(e){ S.inflErr = String(e.message || e); save(); } finally { inflBusy = false; }
 }
 function inflCard(){
-  const io = h('input', { type:'number', inputmode:'decimal', step:'any', placeholder:'ex. 1,5' });
+  const io = h('input', { type:'text', inputmode:'decimal', step:'any', placeholder:'ex. 1,5' });
   if(S.inflOv != null) io.value = S.inflOv;
   return h('div', { class:'card form', style:'margin-top:12px' },
     h('div', { class:'full' }, h('div', { class:'n' }, 'Inflation France'),
-      h('div', { class:'m' }, inflOk() ? 'Dernier glissement annuel publié : ' + fr1(S.infl.rate) + ' % (' + S.infl.period + ')' : 'Non récupérée pour l’instant (relais à jour requis).')),
+      h('div', { class:'m' }, inflOk() ? 'Dernier glissement annuel publié : ' + fr1(S.infl.rate) + ' % (' + S.infl.period + ')' : 'Non récupérée automatiquement' + (S.inflErr ? ' (' + S.inflErr + ')' : '') + '. Saisis-la ci-dessous.')),
     fld('Inflation manuelle (%)', io, 1),
-    h('button', { class:'btn full', onclick:() => { const v = parseFloat(io.value); if(isNaN(v)) delete S.inflOv; else S.inflOv = v; save(); render(); } }, 'Enregistrer l’inflation'));
+    h('button', { class:'btn full', onclick:() => { const v = pf(io.value); if(isNaN(v)) delete S.inflOv; else S.inflOv = v; save(); render(); } }, 'Enregistrer l’inflation'));
 }
 function superCard(brut, s){
   const i = infl(), net = brut - s.t, sup = net / (1 + i / 100), perte = net - sup;
@@ -244,7 +246,7 @@ function toast(t){
   const x = h('div', { class:'toast', role:'status' }, t); document.body.append(x); setTimeout(() => x.remove(), 3800);
 }
 const back = (href, t) => h('button', { class:'link', onclick:() => go(href) }, '‹ ' + t);
-const numIn = () => h('input', { type:'number', inputmode:'decimal', step:'any', min:'0' });
+const numIn = () => h('input', { type:'text', inputmode:'decimal', step:'any', min:'0' });
 const fld = (lab, i, full) => h('div', { class:full ? 'full' : null }, h('label', null, lab), i);
 function head(title, a){
   const pv = a.v - a.c;
@@ -327,40 +329,60 @@ function vEnv(id){
   } }, 'Supprimer cette enveloppe'));
   return d;
 }
+function avPerf(e){
+  const ys = Object.keys(e.rates || {}).map(Number).filter(y => y > 1990).sort((p, q) => p - q);
+  if(!ys.length) return null;
+  const prod = ys.reduce((acc, y) => acc * (1 + e.rates[y] / 100), 1), n = ys.length;
+  return { cum:(prod - 1) * 100, ann:(Math.pow(prod, 1 / n) - 1) * 100, n, prod };
+}
 function vLine(eid, lid){
   const e = S.envs.find(x => x.id === eid), l = e && e.lines.find(x => x.id === lid); if(!l) return vHome();
-  const x = val(l) || { v:0, c:0, d:0 }, dv = divs(l), t = TYPES[e.type];
+  const x = val(l) || { v:0, c:0, d:0 }, dv = divs(l), t = TYPES[e.type], isAV = e.type === 'av';
+  const perf = x.c ? (x.v + dv - x.c) / x.c * 100 : null;
   const d = h('div', null, back('#/e/' + eid, e.name), head(l.name, { v:x.v, c:x.c, dv }));
+  if(perf != null) d.append(h('div', { class:'note' }, 'Performance de la ligne, dividendes inclus : ' + (perf >= 0 ? '+' : '') + fr1(perf) + ' %'));
   if(l.m){
     const q = M.q[l.sym], rt = q ? (q.currency === 'EUR' ? 1 : M.fx[q.currency]) : null;
     if(q && q.price != null && rt) d.append(h('div', { class:'note' }, 'Dernier cours : ' + E2.format(q.price * rt) + ' (cours d’origine ' + money(q.price, q.currency) + ') · ' + P.format((q.price - q.prev) / q.prev) + ' sur la séance'));
   }
-  const ed = l.m ? [['Nombre de parts', 'qty'], ['Prix d’achat moyen (€ par part)', 'cost']] : [['Montant actuel (€)', 'val']].concat(t.nc ? [] : [['Prix d’achat (€)', 'cst']]);
+  if(isAV){
+    const ap = avPerf(e);
+    d.append(h('div', { class:'card', style:'padding:14px;margin-top:12px' },
+      h('div', { class:'m' }, 'Performance annoncée par l’assureur'),
+      ap ? h('div', { class:'total up', style:'font-size:24px' }, (ap.cum >= 0 ? '+' : '') + fr1(ap.cum) + ' % cumulés')
+         : h('div', { class:'empty', style:'padding:6px 0' }, 'Aucun taux saisi.'),
+      ap ? h('div', { class:'note' }, 'Soit ' + fr1(ap.ann) + ' % par an en moyenne sur ' + ap.n + ' année(s), et ' + E0.format(l.cst * ap.prod) + ' si tes versements ont suivi ces taux.') : null,
+      h('div', { class:'note' }, 'Taux à saisir dans l’onglet Net, sur ' + e.name + '.')));
+  }
+  const ed = l.m ? [['Nombre de parts', 'qty'], ['Prix d’achat moyen (€ par part)', 'cost']]
+    : [['Montant actuel (€)', 'val']].concat(t.nc ? [] : [[isAV ? 'Versements cumulés (€)' : 'Prix d’achat (€)', 'cst']]);
   const ins = ed.map(([lab, k]) => { const i = numIn(); i.value = l[k]; return [lab, k, i]; });
-  const pvI = (!l.m && !t.nc) ? h('input', { type:'number', inputmode:'decimal', step:'any' }) : null;
+  const pvI = (!l.m && !t.nc) ? numIn() : null;
   if(pvI) pvI.value = +((l.val || 0) - (l.cst || 0)).toFixed(2);
   const pv0 = pvI && pvI.value;
   d.append(h('h2', null, 'Position'), h('div', { class:'card form' }, ...ins.map(([lab, , i]) => fld(lab, i)), pvI ? fld('ou plus-value (€)', pvI) : null,
     h('button', { class:'btn full', onclick:() => {
-      ins.forEach(([, k, i]) => { const n = parseFloat(i.value); if(n >= 0) l[k] = n; });
-      if(pvI && pvI.value !== pv0){ const p = parseFloat(pvI.value); if(!isNaN(p)) l.cst = l.val - p; }
+      ins.forEach(([, k, i]) => { const n = pf(i.value); if(n >= 0) l[k] = n; });
+      if(pvI && pvI.value !== pv0){ const p = pf(pvI.value); if(!isNaN(p)) l.cst = l.val - p; }
       if(t.nc && !l.m) l.cst = l.val;
       save(); render(); refresh();
     } }, 'Enregistrer')));
-  d.append(h('h2', null, 'Dividendes perçus'));
-  const dc = h('div', { class:'card list' });
-  (l.divs || []).slice().sort((a, b) => b.d.localeCompare(a.d)).forEach(dd => dc.append(h('div', { class:'row' },
-    h('div', { class:'l' }, h('div', { class:'n' }, E2.format(dd.amt)), h('div', { class:'m' }, new Date(dd.d).toLocaleDateString('fr-FR'))),
-    h('button', { class:'link', onclick:() => { l.divs = l.divs.filter(z => z !== dd); save(); render(); } }, 'Retirer'))));
-  if(!dc.children.length) dc.append(h('div', { class:'empty' }, 'Aucun dividende noté.'));
-  d.append(dc);
-  if(dv && x.c) d.append(h('div', { class:'note' }, 'Rendement perçu : ' + PP.format(dv / x.c) + ' du prix d’achat'));
-  const dt = h('input', { type:'date', value:new Date().toISOString().slice(0, 10) }), am = numIn();
-  d.append(h('div', { class:'card form', style:'margin-top:12px' }, fld('Date', dt), fld('Montant reçu (€)', am),
-    h('button', { class:'btn full', onclick:() => {
-      const n = parseFloat(am.value); if(!(n > 0) || !dt.value){ am.focus(); return; }
-      (l.divs = l.divs || []).push({ d:dt.value, amt:n }); save(); render();
-    } }, 'Ajouter le dividende')));
+  if(!isAV){
+    d.append(h('h2', null, 'Dividendes perçus'));
+    const dc = h('div', { class:'card list' });
+    (l.divs || []).slice().sort((p, q) => q.d.localeCompare(p.d)).forEach(dd => dc.append(h('div', { class:'row' },
+      h('div', { class:'l' }, h('div', { class:'n' }, E2.format(dd.amt)), h('div', { class:'m' }, new Date(dd.d).toLocaleDateString('fr-FR'))),
+      h('button', { class:'link', onclick:() => { l.divs = l.divs.filter(z => z !== dd); save(); render(); } }, 'Retirer'))));
+    if(!dc.children.length) dc.append(h('div', { class:'empty' }, 'Aucun dividende noté.'));
+    d.append(dc);
+    if(dv && x.c) d.append(h('div', { class:'note' }, 'Rendement perçu : ' + PP.format(dv / x.c) + ' du prix d’achat'));
+    const dt = h('input', { type:'date', value:new Date().toISOString().slice(0, 10) }), am = numIn();
+    d.append(h('div', { class:'card form', style:'margin-top:12px' }, fld('Date', dt), fld('Montant reçu (€)', am),
+      h('button', { class:'btn full', onclick:() => {
+        const n = pf(am.value); if(!(n > 0) || !dt.value){ am.focus(); return; }
+        (l.divs = l.divs || []).push({ d:dt.value, amt:n }); save(); render();
+      } }, 'Ajouter le dividende')));
+  }
   d.append(h('button', { class:'link del', style:'margin-top:20px', onclick:() => {
     if(confirm('Supprimer « ' + l.name + ' » ?')){ e.lines = e.lines.filter(z => z !== l); save(); go('#/e/' + eid); }
   } }, 'Supprimer cette ligne'));
@@ -392,11 +414,11 @@ function vOnb(){
 /* ---------- Formulaires ---------- */
 function manualForm(type, done, dn){
   const t = TYPES[type], nm = h('input', { type:'text', value:dn || '', placeholder:'Nom de l’actif' }), v = numIn(), c = numIn();
-  const p = h('input', { type:'number', inputmode:'decimal', step:'any', placeholder:'ex. 250 ou -120' });
+  const p = h('input', { type:'text', inputmode:'decimal', step:'any', placeholder:'ex. 250 ou -120' });
   const ok = h('button', { class:'btn full', onclick:() => {
-    const val = parseFloat(v.value);
+    const val = pf(v.value);
     let cst = val;
-    if(!t.nc){ if(c.value !== '') cst = parseFloat(c.value); else if(p.value !== '') cst = val - parseFloat(p.value); }
+    if(!t.nc){ if(c.value !== '') cst = pf(c.value); else if(p.value !== '') cst = val - pf(p.value); }
     if(!nm.value.trim()){ nm.focus(); return; }
     if(!(val >= 0) || isNaN(cst)){ v.focus(); return; }
     done({ id:uid(), name:nm.value.trim(), val, cst, divs:[] });
@@ -411,9 +433,9 @@ function searchBox(e, onPick){
   const pick0 = r => {
     const qty = numIn(), cost = numIn(), lab = h('label', null, 'Prix d’achat moyen (€ par part)');
     const add = () => {
-      const n = parseFloat(qty.value), c = parseFloat(cost.value);
+      const n = pf(qty.value), c = pf(cost.value);
       if(!(n > 0) || !(c >= 0)){ qty.focus(); return; }
-      e.lines.push({ id:uid(), m:1, sym:r.symbol, name:r.name, qty:n, cost:c, divs:[] }); save(); render(); refresh();
+      e.lines.push({ id:uid(), m:1, sym:r.symbol, name:r.name, qty:n, cost:c, divs:[], kind:r.type, ordFee:0 }); save(); render(); refresh();
     };
     box.replaceChildren(h('div', { class:'form' },
       h('div', { class:'full' }, h('div', { class:'n' }, r.name), h('div', { class:'m' }, r.symbol + ' · ' + r.exchange)),
@@ -481,8 +503,10 @@ const fp = e => e.lines.reduce((a, l) => { const x = val(l); return a + (l.m && 
 const fx = e => e.lines.reduce((a, l) => a + (l.m ? (l.fix || 0) : 0), 0) + (e.fix || 0);
 const fees = e => fp(e) + fx(e);
 const taxe = e => { const a = agg(e.lines); return Math.max(0, a.v - a.c) * (e.tax || 0) / 100; };
-const todo = e => e.tax == null || e.lines.some(l => l.m && l.fee == null) || (e.lines.some(l => !l.m) && e.fee == null);
-const sums = es => es.reduce((o, e) => { o.p += fp(e); o.x += fx(e); o.f += fees(e); o.t += taxe(e); return o; }, { p:0, x:0, f:0, t:0 });
+const isETF = l => l.kind === 'ETF';
+const todo = e => e.tax == null || e.lines.some(l => l.m && isETF(l) && l.fee == null) || (e.lines.some(l => !l.m) && e.fee == null);
+const ordOf = e => e.lines.reduce((a, l) => a + (l.ordFee || 0), 0);
+const sums = es => es.reduce((o, e) => { o.p += fp(e); o.x += fx(e); o.f += fees(e); o.t += taxe(e); o.o += ordOf(e); return o; }, { p:0, x:0, f:0, t:0, o:0 });
 
 function donut(it, top, sub){
   const R = 54, C = 2 * Math.PI * R, tot = it.reduce((a, o) => a + o.v, 0);
@@ -529,7 +553,7 @@ function vNet(){
     lg('var(--warn)', 'Impôts latents', '− ' + E0.format(s.t), pc(s.t) + ' du brut'),
     h('div', { style:'display:flex;justify-content:space-between;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);color:var(--muted);font-size:14px' },
       h('span', null, 'Patrimoine brut'), h('span', null, E0.format(a.v)))),
-    h('div', { class:'tiles' }, tile('Frais par an', E0.format(s.f), pc(s.f) + ' du patrimoine'), tile('Frais par mois', E0.format(s.f / 12), 'en moyenne')));
+    h('div', { class:'tiles' }, tile('Frais par an', E0.format(s.f), pc(s.f) + ' du patrimoine'), tile('Frais par mois', E0.format(s.f / 12), 'en moyenne'), tile('Frais d’ordres', E0.format(s.o), 'payés une fois, à l’achat')));
   if(td.length) d.append(h('div', { class:'card', style:'margin-top:14px;padding:14px' }, h('div', { class:'n' }, td.length + ' enveloppe(s) à compléter'),
     h('div', { class:'m', style:'margin:4px 0 12px' }, 'Tant que les frais et impôts ne sont pas saisis, le net est surestimé.'),
     h('button', { class:'btn', onclick:() => { S.nw = 1; save(); go('#/n/e/' + td[0].id); } }, 'Compléter maintenant')));
@@ -564,42 +588,64 @@ function vNetClass(i){
 }
 function ratesCard(e){
   e.rates = e.rates || {};
-  const ys = Object.keys(e.rates).sort((a, b) => b - a), list = h('div', { class:'card list' });
+  const ys = Object.keys(e.rates).sort((p, q) => q - p), list = h('div', { class:'card list' });
   ys.forEach(y => list.append(h('div', { class:'row' }, h('div', { class:'l' }, h('div', { class:'n' }, y)), h('div', { class:'r n' }, fr1(e.rates[y]) + ' %'),
     h('button', { class:'link del', onclick:() => { delete e.rates[y]; save(); render(); } }, 'Retirer'))));
   if(!ys.length) list.append(h('div', { class:'empty' }, 'Aucun taux saisi. Ajoute le taux net annoncé chaque année par ton assureur.'));
-  const yI = h('input', { type:'number', inputmode:'numeric', placeholder:String(nowY()) }), rI = h('input', { type:'number', inputmode:'decimal', step:'any', placeholder:'ex. 2,8' });
-  return h('div', null, h('h2', null, 'Rendement net annoncé par année'), list,
+  const ap = avPerf(e);
+  const yI = numIn(), rI = numIn();
+  yI.placeholder = String(nowY()); rI.placeholder = 'ex. 2,8';
+  return h('div', null, h('h2', null, 'Taux net annoncés par année'),
+    ap ? h('div', { class:'card', style:'padding:14px;margin-bottom:10px' }, h('div', { class:'m' }, 'Performance cumulée'),
+      h('div', { class:'total up', style:'font-size:24px' }, (ap.cum >= 0 ? '+' : '') + fr1(ap.cum) + ' %'),
+      h('div', { class:'note' }, fr1(ap.ann) + ' % par an en moyenne (' + ap.n + ' année(s))')) : null,
+    list,
     h('div', { class:'card form', style:'margin-top:10px' }, fld('Année', yI), fld('Taux net (%)', rI),
-      h('button', { class:'btn full', onclick:() => { const y = parseInt(yI.value), r = parseFloat(rI.value); if(!(y > 1990) || isNaN(r)) return; e.rates[y] = r; save(); render(); } }, 'Ajouter ce taux')));
+      h('button', { class:'btn full', onclick:() => { const y = parseInt(yI.value, 10), r = pf(rI.value); if(!(y > 1990) || isNaN(r)) return; e.rates[y] = r; save(); render(); } }, 'Ajouter ce taux')));
 }
 function vNetEnv(id){
   const e = S.envs.find(x => x.id === id); if(!e) return vNet();
   const g = agg(e.lines), c = TYPES[e.type].c, up = '#/n/c/' + CLASSES.indexOf(c), pvv = Math.max(0, g.v - g.c);
   const hasM = e.lines.some(l => l.m), showEnv = e.lines.some(l => !l.m) || !hasM;
-  const num = (v, ph) => { const i = h('input', { type:'number', inputmode:'decimal', step:'any', min:'0', placeholder:ph }); if(v != null) i.value = v; return i; };
-  const lineIn = e.lines.filter(l => l.m).map(l => ({ l, f:num(l.fee, '0'), k:num(l.fix, '0'), v:(val(l) || { v:0 }).v }));
+  const num = (v, ph) => { const i = numIn(); i.placeholder = ph; if(v != null) i.value = v; return i; };
+  const KINDS = [['', 'Type non précisé'], ['ETF', 'ETF'], ['Action', 'Action'], ['Crypto', 'Crypto'], ['Fonds', 'Fonds'], ['Indice', 'Indice'], ['Autre', 'Autre']];
+  const lineIn = e.lines.filter(l => l.m).map(l => {
+    const kind = h('select', null, ...KINDS.map(([v, t]) => h('option', { value:v }, t)));
+    kind.value = l.kind || '';
+    return { l, kind, f:num(l.fee, '0'), k:num(l.fix, '0'), o:num(l.ordFee, '0'), v:(val(l) || { v:0 }).v };
+  });
   const envFee = num(e.fee, '0'), envFix = num(e.fix, '0'), tax = num(e.tax, '0');
-  const rd = x => x.value === '' ? undefined : parseFloat(x.value);
+  const rd = x => { if(x.value === '') return undefined; const v = pf(x.value); return isNaN(v) ? undefined : v; };
   const next = () => { const n = S.envs.find(x => todo(x) && x.id !== e.id); if(S.nw && n) go('#/n/e/' + n.id); else { S.nw = 0; save(); go(up); } };
   const saveAll = () => {
-    lineIn.forEach(o => { const f = rd(o.f), k = rd(o.k); if(f === undefined) delete o.l.fee; else o.l.fee = f; if(k === undefined) delete o.l.fix; else o.l.fix = k; });
+    lineIn.forEach(o => {
+      if(o.kind.value) o.l.kind = o.kind.value; else delete o.l.kind;
+      const f = rd(o.f), k = rd(o.k), oo = rd(o.o);
+      if(f === undefined || o.l.kind === 'Action' || o.l.kind === 'Crypto') delete o.l.fee; else o.l.fee = f;
+      if(k === undefined) delete o.l.fix; else o.l.fix = k;
+      if(oo === undefined) delete o.l.ordFee; else o.l.ordFee = oo;
+    });
     if(showEnv){ const f = rd(envFee), k = rd(envFix); if(f === undefined) delete e.fee; else e.fee = f; if(k === undefined) delete e.fix; else e.fix = k; }
     const t = rd(tax); if(t === undefined) delete e.tax; else e.tax = t;
     save(); next();
   };
   const kids = [];
   if(hasM){
-    kids.push(h('div', { class:'full m' }, 'Frais par ligne cotée (annuels, sur la valeur de chaque ligne)'));
-    lineIn.forEach(o => kids.push(h('div', { class:'full' }, h('div', { class:'n' }, o.l.name), h('div', { class:'m' }, E0.format(o.v))), fld('Frais de gestion (% / an)', o.f), fld('Frais fixes (€ / an)', o.k)));
+    kids.push(h('div', { class:'full m' }, 'Lignes cotées : les frais annuels concernent les ETF uniquement'));
+    lineIn.forEach(o => {
+      const isEtf = o.kind.value === 'ETF' || !o.kind.value;
+      kids.push(h('div', { class:'full' }, h('div', { class:'n' }, o.l.name), h('div', { class:'m' }, E0.format(o.v))), fld('Type de titre', o.kind, 1));
+      if(isEtf) kids.push(fld('Frais de gestion (% / an, ETF)', o.f), fld('Frais fixes (€ / an, ETF)', o.k));
+      kids.push(fld('Frais payés sur les ordres (€, cumul)', o.o, 1));
+    });
   }
-  if(showEnv) kids.push(h('div', { class:'full m' }, hasM ? 'Frais des lignes non cotées' : 'Frais de l’enveloppe'), fld('Frais de gestion annuels (% de l’encours)', envFee), fld('Frais fixes annuels (€)', envFix));
+  if(showEnv) kids.push(h('div', { class:'full m' }, hasM ? 'Lignes non cotées' : 'Frais de l’enveloppe'), fld('Frais de gestion annuels (% de l’encours)', envFee), fld('Frais fixes annuels (€)', envFix));
   kids.push(fld('Impôt sur la plus-value (%)', tax, 1));
   kids.push(h('button', { class:'btn full', onclick:saveAll }, S.nw ? 'Enregistrer et continuer' : 'Enregistrer'));
-  kids.push(h('button', { class:'btn alt full', onclick:() => { lineIn.forEach(o => { o.f.value = 0; o.k.value = 0; }); envFee.value = 0; envFix.value = 0; tax.value = 0; saveAll(); } }, 'Aucun frais ni impôt'));
+  kids.push(h('button', { class:'btn alt full', onclick:() => { lineIn.forEach(o => { o.f.value = 0; o.k.value = 0; o.o.value = 0; }); envFee.value = 0; envFix.value = 0; tax.value = 0; saveAll(); } }, 'Aucun frais ni impôt'));
   if(S.nw) kids.push(h('button', { class:'link full', onclick:() => { S.nw = 0; save(); go(up); } }, 'Plus tard'));
   const out = [ back(up, c), h('h1', null, e.name), h('div', { class:'total' }, E0.format(g.v)),
-    h('div', { class:'sub' }, h('span', null, E0.format(fees(e)) + ' de frais par an'), h('span', null, E0.format(taxe(e)) + ' d’impôts latents sur ' + E0.format(pvv) + ' de plus-value')) ];
+    h('div', { class:'sub' }, h('span', null, E0.format(fees(e)) + ' de frais par an'), h('span', null, E0.format(taxe(e)) + ' d’impôts latents sur ' + E0.format(pvv) + ' de plus-value'), ordOf(e) ? h('span', null, E0.format(ordOf(e)) + ' de frais d’ordres') : null) ];
   if(S.nw && S.envs.some(todo)) out.push(h('div', { class:'note' }, 'Il reste ' + S.envs.filter(todo).length + ' enveloppe(s) à compléter.'));
   out.push(h('h2', null, 'Frais et impôts'), h('div', { class:'card form' }, ...kids));
   if(e.type === 'av') out.push(ratesCard(e));
@@ -613,7 +659,7 @@ function projCard(v, s){
   rI.value = st.r; rI.removeAttribute('min');
   const bs = NS.map(n => h('button', { class:'chip', onclick:() => { st.n = n; upd(); } }, n + ' ans'));
   const upd = () => {
-    const r = parseFloat(rI.value); if(!isNaN(r)) st.r = r; save();
+    const r = pf(rI.value); if(!isNaN(r)) st.r = r; save();
     bs.forEach((b, i) => b.setAttribute('aria-pressed', String(NS[i] === st.n)));
     out.replaceChildren(...projOut(v, s, st));
   };
@@ -675,12 +721,12 @@ async function quote(sym){
   }
   return { p:n.price, c:n.currency, fx:fxr };
 }
-function applyBuy(b, qty, price){
+function applyBuy(b, qty, price, ord){
   const e = S.envs.find(x => x.id === b.env); if(!e){ alert('Enveloppe introuvable.'); return; }
   const l = e.lines.find(x => x.m && x.sym === b.sym);
-  if(l){ const nq = l.qty + qty; l.cost = (l.cost * l.qty + price * qty) / nq; l.qty = nq; }
-  else e.lines.push({ id:uid(), m:1, sym:b.sym, name:b.name, qty, cost:price, divs:[] });
-  b.done = { t:Date.now(), q:qty, p:price, e:qty * price };
+  if(l){ const nq = l.qty + qty; l.cost = (l.cost * l.qty + price * qty) / nq; l.qty = nq; l.ordFee = (l.ordFee || 0) + ord; if(!l.kind && b.kind) l.kind = b.kind; }
+  else e.lines.push({ id:uid(), m:1, sym:b.sym, name:b.name, qty, cost:price, divs:[], kind:b.kind || undefined, ordFee:ord });
+  b.done = { t:Date.now(), q:qty, p:price, e:qty * price, o:ord };
   save(); render(); refresh();
   toast('Achat validé : ' + N.format(+qty.toFixed(4)) + ' part(s) de ' + b.name + ' ajoutée(s) à « ' + e.name + ' »');
 }
@@ -698,14 +744,15 @@ async function confirmBuy(b, box){
   box.replaceChildren(h('div', { class:'empty' }, 'Récupération du cours…'));
   let q = null, err = '';
   try{ q = await quote(b.sym); }catch(e){ err = e.message; }
-  const fxr = q ? q.fx : 1, pI = numIn(), qI = numIn();
+  const fxr = q ? q.fx : 1, pI = numIn(), qI = numIn(), oI = numIn();
+  oI.value = 0;
   if(q){ pI.value = +(q.p * fxr).toFixed(4); qI.value = +(b.amt / (q.p * fxr)).toFixed(4); }
-  pI.oninput = () => { const p = parseFloat(pI.value); if(p > 0) qI.value = +(b.amt / p).toFixed(4); };
+  pI.oninput = () => { const p = pf(pI.value); if(p > 0) qI.value = +(b.amt / p).toFixed(4); };
   box.replaceChildren(h('div', { class:'form', style:'border-top:1px solid var(--line)' },
     err ? h('div', { class:'note err full' }, 'Cours indisponible (' + err + '). Saisis le prix payé, en euros.')
         : h('div', { class:'note full' }, 'Cours actuel converti en euros (cours d’origine : ' + q.c + '). Ajuste avec ton prix d’exécution réel.'),
-    fld('Prix par part (€)', pI), fld('Nombre de parts', qI),
-    h('button', { class:'btn', onclick:() => { const p = parseFloat(pI.value), n = parseFloat(qI.value); if(!(p > 0) || !(n > 0)) return; applyBuy(b, n, p); } }, 'Confirmer l’achat'),
+    fld('Prix par part (€)', pI), fld('Nombre de parts', qI), fld('Frais de l’ordre (€)', oI, 1),
+    h('button', { class:'btn', onclick:() => { const p = pf(pI.value), n = pf(qI.value), o = pf(oI.value); if(!(p > 0) || !(n > 0)) return; applyBuy(b, n, p, o > 0 ? o : 0); } }, 'Confirmer l’achat'),
     h('button', { class:'btn alt', onclick:() => box.replaceChildren() }, 'Annuler')));
 }
 const small = 'padding:8px 14px';
@@ -752,7 +799,7 @@ function provCard(y){
   const la = tg.find(e => e.type === 'la'); if(la) sel.value = la.id;
   const f = h('div', { class:'card form', style:'margin-top:10px' }, fld('Nom', nm, 1), fld('Montant mensuel (€)', am), fld('Enveloppe cible', sel),
     h('button', { class:'btn full', onclick:() => {
-      const n = parseFloat(am.value);
+      const n = pf(am.value);
       if(!nm.value.trim()){ nm.focus(); return; } if(!(n > 0)){ am.focus(); return; }
       T.p.push({ id:uid(), name:nm.value.trim(), amt:n, env:sel.value, f:y === nowY() ? nowM() : 0 }); save(); render();
     } }, 'Ajouter la provision'));
@@ -778,8 +825,8 @@ function vStratMonth(i){
       fld('Montant à investir (€)', am), fld('Dans quelle enveloppe ?', sel),
       h('label', { class:'full', style:'display:flex;gap:8px;align-items:center;margin:0' }, rep, 'Répéter chaque mois jusqu’à décembre'),
       h('button', { class:'btn', onclick:() => {
-        const n = parseFloat(am.value); if(!(n > 0)){ am.focus(); return; }
-        for(let m = i; m <= (rep.checked ? 11 : i); m++) T.b.push({ id:uid(), m, sym:r.symbol, name:r.name, env:sel.value, amt:n, done:null });
+        const n = pf(am.value); if(!(n > 0)){ am.focus(); return; }
+        for(let m = i; m <= (rep.checked ? 11 : i); m++) T.b.push({ id:uid(), m, sym:r.symbol, name:r.name, env:sel.value, amt:n, done:null, kind:r.type });
         save(); render();
       } }, 'Ajouter au plan'),
       h('button', { class:'btn alt', onclick:() => box.replaceChildren() }, 'Annuler')));
@@ -828,7 +875,7 @@ function vGoals(){
     h('button', { class:'chip', 'aria-pressed':String(mode === 'net'), onclick:() => { S.gm = 'net'; save(); render(); } }, 'Après impôts (net)'),
     h('button', { class:'chip', 'aria-pressed':String(mode === 'brut'), onclick:() => { S.gm = 'brut'; save(); render(); } }, 'Avant impôts (brut)'));
   const d = h('div', null, h('h1', null, 'Objectifs'), h('div', { class:'total' }, gs.length ? ok + ' sur ' + gs.length + ' atteint' + (ok > 1 ? 's' : '') : 'Aucun objectif'));
-  if(gs.length) d.append(h('div', { class:'tiles' }, tile('Déjà financé', E0.format(fu), 'sur ' + E0.format(tot)), tile('Reste à financer', E0.format(tot - fu), gs.length - ok + ' objectif(s) en cours')), chips);
+  if(gs.length) d.append(h('div', { class:'tiles' }, tile('Déjà financé', E0.format(fu), 'sur ' + E0.format(tot)), tile('Reste à financer', E0.format(tot - fu), gs.length - ok + ' objectif(s) en cours')), chips, S.envs.some(e => typeof e.tax === 'number') ? null : h('div', { class:'note' }, 'Aucun impôt renseigné dans l’onglet Net : le montant après impôts est égal au montant brut.'));
   d.append(h('button', { class:'btn', style:'width:100%;margin-top:14px', onclick:() => go('#/g/new') }, '+ Nouvel objectif'), h('h2', null, 'Mes objectifs'));
   const card = h('div', { class:'card list' });
   gs.forEach(g => {
@@ -879,7 +926,7 @@ function vGoalForm(id){
     h('div', { class:'card form', style:'margin-top:12px' }, fld('Type', typ, 1), fld('Nom', nm, 1), fld('Montant visé (€)', tg), fld('Échéance', dt)),
     h('h2', null, 'Enveloppes qui le financent'), box,
     h('button', { class:'btn', style:'width:100%;margin-top:16px', onclick:() => {
-      const t = parseFloat(tg.value), ev = checks.filter(([, c]) => c.checked).map(([e]) => e.id);
+      const t = pf(tg.value), ev = checks.filter(([, c]) => c.checked).map(([e]) => e.id);
       if(!nm.value.trim()){ nm.focus(); return; } if(!(t > 0)){ tg.focus(); return; } if(!dt.value){ dt.focus(); return; }
       if(!ev.length){ alert('Choisis au moins une enveloppe.'); return; }
       const o = { id:g ? g.id : uid(), type:typ.value, name:nm.value.trim(), target:t, date:dt.value, envs:ev };
@@ -923,13 +970,13 @@ function budQ(B){
     const i = numIn(); i.value = B.rev || '';
     d.append(h('div', { class:'total', style:'font-size:24px;margin-top:24px' }, 'Quels sont tes revenus nets par mois ?'),
       h('div', { class:'card form', style:'margin-top:14px' }, fld('Revenus nets mensuels (€)', i, 1)),
-      budNav(B, st, last, () => { B.rev = Math.max(0, parseFloat(i.value) || 0); }));
+      budNav(B, st, last, () => { B.rev = Math.max(0, pf(i.value) || 0); }));
   } else if(st <= n){
     const c = B.cats[st - 1], i = numIn(); i.value = c.amt || '';
     d.append(h('div', { class:'total', style:'font-size:24px;margin-top:24px' }, 'Combien dépenses-tu chaque mois pour ' + c.name.toLowerCase() + ' ?'),
       h('div', { class:'note' }, 'Mets 0 si ce poste ne te concerne pas.'),
       h('div', { class:'card form', style:'margin-top:14px' }, fld(c.name + ' (€ / mois)', i, 1)),
-      budNav(B, st, last, () => { c.amt = Math.max(0, parseFloat(i.value) || 0); }));
+      budNav(B, st, last, () => { c.amt = Math.max(0, pf(i.value) || 0); }));
   } else {
     const nN = h('input', { type:'text', placeholder:'Ex. Assurance auto' }), nA = numIn();
     const list = h('div', { class:'card list', style:'margin-top:14px' });
@@ -942,7 +989,7 @@ function budQ(B){
       h('div', { class:'card form', style:'margin-top:12px' }, fld('Nouvelle catégorie', nN, 1), fld('Montant mensuel (€)', nA),
         h('button', { class:'btn full', onclick:() => {
           const t = nN.value.trim(); if(!t){ nN.focus(); return; }
-          B.cats.push({ id:uid(), name:t, amt:Math.max(0, parseFloat(nA.value) || 0) }); save(); render();
+          B.cats.push({ id:uid(), name:t, amt:Math.max(0, pf(nA.value) || 0) }); save(); render();
         } }, 'Ajouter')),
       budNav(B, st, last, () => {}));
   }
@@ -1062,9 +1109,9 @@ function compoundCard(){
   rI.value = I.r; nI.value = I.n;
   const out = h('div');
   const upd = () => {
-    I.c0 = Math.max(0, parseFloat(c0I.value) || 0);
-    I.pmt = Math.max(0, parseFloat(pI.value) || 0);
-    I.r = parseFloat(rI.value) || 0;
+    I.c0 = Math.max(0, pf(c0I.value) || 0);
+    I.pmt = Math.max(0, pf(pI.value) || 0);
+    I.r = pf(rI.value) || 0;
     I.n = Math.min(60, Math.max(1, parseInt(nI.value) || I.n));
     save(); out.replaceChildren(...compoundOut(I));
   };
